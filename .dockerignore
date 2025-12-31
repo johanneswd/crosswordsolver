@@ -1,0 +1,10 @@
+target
+.git
+.gitignore
+Dockerfile
+fly.toml
+tests
+scripts
+spreadthewordlist.dict
+.idea
+.vscode
