@@ -1,8 +1,9 @@
 pub mod handlers;
 pub mod index;
+pub mod rate_limit;
 
-pub use handlers::{router, AppState};
+pub use handlers::{AppState, router};
 pub use index::{
-    parse_letter_bag, parse_letters, parse_pattern, AnagramParams, QueryParams, WordIndex,
-    MAX_WORD_LEN,
+    AnagramParams, MAX_WORD_LEN, QueryParams, WordIndex, parse_letter_bag, parse_letters,
+    parse_pattern,
 };

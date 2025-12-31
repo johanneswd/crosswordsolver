@@ -13,6 +13,7 @@ RUN cargo build --release && rm -rf src target/release/deps/crosswordsolver*
 
 # Build
 COPY src ./src
+COPY templates ./templates
 COPY words.txt .
 RUN cargo build --release --bin crosswordsolver
 

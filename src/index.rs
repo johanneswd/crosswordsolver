@@ -165,7 +165,10 @@ impl WordIndex {
             };
         }
 
-        let offset = params.page.saturating_sub(1).saturating_mul(params.page_size);
+        let offset = params
+            .page
+            .saturating_sub(1)
+            .saturating_mul(params.page_size);
         let mut items = Vec::with_capacity(params.page_size.min(total));
         for idx in candidates.iter_ones().skip(offset).take(params.page_size) {
             if let Some(word) = len_index.words.get(idx) {
@@ -211,7 +214,10 @@ impl WordIndex {
             };
         }
 
-        let offset = params.page.saturating_sub(1).saturating_mul(params.page_size);
+        let offset = params
+            .page
+            .saturating_sub(1)
+            .saturating_mul(params.page_size);
         let mut total = 0usize;
         let mut items = Vec::with_capacity(params.page_size);
 
@@ -248,7 +254,8 @@ impl LenIndex {
         let mut pos_letter: Vec<[BitSet; ALPHABET]> = (0..len)
             .map(|_| array_init::array_init(|_| bitvec![usize, Lsb0; 0; n]))
             .collect();
-        let mut contains: [BitSet; ALPHABET] = array_init::array_init(|_| bitvec![usize, Lsb0; 0; n]);
+        let mut contains: [BitSet; ALPHABET] =
+            array_init::array_init(|_| bitvec![usize, Lsb0; 0; n]);
         let mut letter_counts: Vec<[u8; ALPHABET]> = Vec::with_capacity(n);
 
         for (idx, word) in words.iter().enumerate() {
@@ -256,7 +263,9 @@ impl LenIndex {
             for (pos, ch) in word.bytes().enumerate() {
                 let letter_idx = (ch - b'a') as usize;
                 counts[letter_idx] = counts[letter_idx].saturating_add(1);
-                if let Some(bitvec) = pos_letter.get_mut(pos).and_then(|arr| arr.get_mut(letter_idx))
+                if let Some(bitvec) = pos_letter
+                    .get_mut(pos)
+                    .and_then(|arr| arr.get_mut(letter_idx))
                 {
                     bitvec.set(idx, true);
                 }
@@ -355,8 +364,8 @@ pub enum PatternError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     fn make_index(words: &[&str]) -> Arc<WordIndex> {
         let mut file = NamedTempFile::new().expect("temp file");
@@ -375,6 +384,18 @@ mod tests {
         let parsed_dots = parse_pattern("a..le").unwrap();
         assert_eq!(parsed_dots[3], Some(b'l'));
         assert!(parse_pattern("").is_err());
+    }
+
+    #[test]
+    fn parse_pattern_rejects_invalid_chars() {
+        assert!(parse_pattern("a1b").is_err());
+        assert!(parse_pattern("🙂🙂").is_err());
+    }
+
+    #[test]
+    fn parse_letter_bag_enforces_length() {
+        assert!(parse_letter_bag("abcd", 3).is_err());
+        assert!(parse_letter_bag("abc", 3).is_ok());
     }
 
     #[test]

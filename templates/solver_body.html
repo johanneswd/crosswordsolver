@@ -1,0 +1,38 @@
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Word length</label>
+          <select id="lengthSelect" class="form-select form-select-lg" aria-label="Word length"></select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Pattern</label>
+          <div id="charRow" class="d-flex flex-wrap char-row"></div>
+          <div class="form-text">Type letters; leave blanks empty. Non-letters are ignored.</div>
+        </div>
+
+        <div class="d-grid">
+          <button id="solveBtn" class="btn btn-primary btn-lg">Solve</button>
+        </div>
+
+        <div class="mt-3">
+          <h2 class="h6 text-muted mb-2">Recent patterns</h2>
+          <div id="recentPatterns" class="d-flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <h2 class="h5">Candidates</h2>
+      <div id="status" class="text-muted mb-2">Enter a pattern to search.</div>
+      <div id="results" class="results">
+        <ul id="resultsList" class="list-group results-list"></ul>
+      </div>
+      <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+        <button id="firstBtn" class="btn btn-outline-secondary btn-sm" type="button" disabled>First</button>
+        <button id="prevBtn" class="btn btn-outline-secondary btn-sm" type="button" disabled>Previous</button>
+        <button id="nextBtn" class="btn btn-outline-secondary btn-sm" type="button" disabled>Next</button>
+        <button id="lastBtn" class="btn btn-outline-secondary btn-sm" type="button" disabled>Last</button>
+        <div id="pageInfo" class="text-muted small ms-1"></div>
+      </div>
+    </div>
