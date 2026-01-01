@@ -9,8 +9,8 @@ use tower_http::trace::TraceLayer;
 use tracing::{Level, info};
 use tracing_subscriber::EnvFilter;
 
-use crosswordsolver::rate_limit::RateLimiterLayer;
-use crosswordsolver::{AppState, WordIndex, router};
+use crosswordsolver_jw::rate_limit::RateLimiterLayer;
+use crosswordsolver_jw::{AppState, WordIndex, router};
 
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_HOST: &str = "0.0.0.0";

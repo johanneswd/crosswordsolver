@@ -8,14 +8,12 @@ WORKDIR /app
 
 # Cache deps
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo 'fn main() {}' > src/main.rs
-RUN cargo build --release && rm -rf src target/release/deps/crosswordsolver*
+COPY crates/crosswordsolver-jw/Cargo.toml crates/crosswordsolver-jw/Cargo.toml
+RUN cargo fetch
 
 # Build
-COPY src ./src
-COPY templates ./templates
-COPY words.txt .
-RUN cargo build --release --bin crosswordsolver
+COPY . .
+RUN cargo build --release --bin crosswordsolver -p crosswordsolver-jw
 
 FROM debian:bookworm-slim
 WORKDIR /app

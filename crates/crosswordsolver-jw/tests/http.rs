@@ -4,8 +4,8 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use tower::util::ServiceExt;
 
-use crosswordsolver::handlers::{AppState, router};
-use crosswordsolver::index::WordIndex;
+use crosswordsolver_jw::handlers::{AppState, router};
+use crosswordsolver_jw::index::WordIndex;
 
 fn make_state() -> AppState {
     let words = b"apple\nangle\nankle\naddle\nample\n";

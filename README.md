@@ -8,11 +8,11 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 1) Prereqs: Rust toolchain (`rustup`), and a word list file (default `words.txt` in the repo).
 2) Install deps and run tests:
    ```bash
-   cargo test
+   cargo test -p crosswordsolver-jw
    ```
 3) Start the server (defaults to `0.0.0.0:8080` and `WORDLIST_PATH=words.txt`):
    ```bash
-   cargo run
+   cargo run -p crosswordsolver-jw --bin crosswordsolver
    ```
 4) Open http://localhost:8080/ to use the UI, or call the API:
    ```bash
