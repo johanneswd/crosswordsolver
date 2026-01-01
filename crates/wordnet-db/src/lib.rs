@@ -205,7 +205,7 @@ pub struct WordNet {
 impl WordNet {
     /// Load WordNet from a directory containing `data.*` and `index.*` files.
     ///
-    /// Defaults to memory-mapping the source files. Use [`load_with_mode`] to
+    /// Defaults to memory-mapping the source files. Use [`WordNet::load_with_mode`] to
     /// force owned buffers instead.
     pub fn load(dict_dir: impl AsRef<Path>) -> Result<Self> {
         Self::load_with_mode(dict_dir, LoadMode::Mmap)
