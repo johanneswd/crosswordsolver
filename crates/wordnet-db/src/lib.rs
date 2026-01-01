@@ -147,7 +147,7 @@ impl DictFiles {
         }
     }
 
-    fn text<'a>(&'a self, r: TextRef) -> &'a str {
+    fn text(&self, r: TextRef) -> &str {
         let bytes = self.bytes(r.file);
         let slice = &bytes[r.start..r.start + r.len];
         std::str::from_utf8(slice).expect("wordnet text is valid utf8")
@@ -687,8 +687,8 @@ fn parse_gloss(file: FileKind, root: &[u8], gloss: &str) -> Result<GlossData> {
         match ch {
             '"' => {
                 if in_quote {
-                    if let Some(start) = quote_start.take() {
-                        if idx > start + 1 {
+                    if let Some(start) = quote_start.take()
+                        && idx > start + 1 {
                             let start_bytes =
                                 trimmed.as_ptr() as usize + start + 1 - root.as_ptr() as usize;
                             examples.push(TextRef {
@@ -697,7 +697,6 @@ fn parse_gloss(file: FileKind, root: &[u8], gloss: &str) -> Result<GlossData> {
                                 len: idx - start - 1,
                             });
                         }
-                    }
                 } else {
                     quote_start = Some(idx);
                 }
