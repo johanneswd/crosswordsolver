@@ -35,9 +35,9 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 - `RATE_LIMIT_RPS` (default 5) and `RATE_LIMIT_BURST` (default 10) control the per-IP rate limiter (only applied when `Fly-Client-IP` header is present)
 
 ## CI/CD
-- GitLab CI runs fmt, clippy, and tests on branches/MRs.
-- Tags matching `vX.Y.Z` trigger `xtask check-tag` and `xtask publish` to release publishable crates to crates.io (requires `CARGO_REGISTRY_TOKEN`).
-- CI caches Cargo registry/git and `target` using a project-local `CARGO_HOME`.
+- GitHub Actions runs fmt, clippy, and tests on pushes/PRs.
+- Tags matching `vX.Y.Z` trigger `xtask check-tag` and `xtask publish` to release publishable crates to crates.io (requires `CARGO_REGISTRY_TOKEN` secret).
+- CI caches Cargo registry/git and `target` using a job-local `CARGO_HOME`.
 
 ## Helper scripts
 - `scripts/build_wordlist.py`: regenerate a normalized `words.txt` from source lists.

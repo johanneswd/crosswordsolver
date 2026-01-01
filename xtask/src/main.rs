@@ -197,10 +197,8 @@ fn topological_sort(packages: &[PublishablePackage]) -> Result<Vec<PublishablePa
     let mut package_map: HashMap<&PackageId, &PublishablePackage> =
         packages.iter().map(|p| (&p.id, p)).collect();
     let publishable_ids: HashSet<&PackageId> = package_map.keys().cloned().collect();
-    let name_to_id: HashMap<&str, &PackageId> = packages
-        .iter()
-        .map(|p| (p.name.as_str(), &p.id))
-        .collect();
+    let name_to_id: HashMap<&str, &PackageId> =
+        packages.iter().map(|p| (p.name.as_str(), &p.id)).collect();
 
     let mut adj: HashMap<&PackageId, Vec<&PackageId>> = HashMap::new();
     let mut indegree: HashMap<&PackageId, usize> = HashMap::new();
