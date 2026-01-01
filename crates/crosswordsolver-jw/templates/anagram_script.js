@@ -46,6 +46,10 @@ function escapeHtml(str) {
   }[ch]));
 }
 
+function prettyLemma(lemma) {
+  return (lemma || '').replace(/_/g, ' ');
+}
+
 function ensurePopover() {
   if (popoverEl) return popoverEl;
   popoverEl = document.createElement('div');
@@ -78,37 +82,34 @@ function positionPopover(target) {
   pop.style.visibility = 'visible';
 }
 
-function renderDefinitions(word, entries) {
-  const defs = [];
-  entries.forEach(entry => {
-    (entry.meanings || []).forEach(meaning => {
-      (meaning.definitions || []).forEach(def => {
-        if (defs.length < 5) {
-          defs.push({
-            partOfSpeech: meaning.partOfSpeech || '',
-            definition: def.definition || '',
-            example: def.example || '',
-          });
-        }
-      });
-    });
-  });
+function renderDefinitions(word, data) {
+  const results = (data && data.results) || [];
+  const defs = results.slice(0, 5).map(res => ({
+    pos: res.pos || '',
+    definition: res.definition || '',
+    example: (res.examples && res.examples[0]) || '',
+    lemmas: res.lemmas || [],
+  }));
   if (!defs.length) {
-    return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">dictionaryapi.dev</div><div class="text-muted">No definition found.</div>`;
+    return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">WordNet</div><div class="text-muted">No definition found.</div>`;
   }
   const items = defs.map(d => {
-    const pos = d.partOfSpeech ? `<span class="text-muted">${escapeHtml(d.partOfSpeech)}</span> ` : '';
+    const pos = d.pos ? `<span class="text-muted">${escapeHtml(d.pos)}</span> ` : '';
     const example = d.example ? `<div class="text-muted small mt-1">“${escapeHtml(d.example)}”</div>` : '';
-    return `<li>${pos}${escapeHtml(d.definition)}${example}</li>`;
+    const lemmas = d.lemmas && d.lemmas.length
+      ? `<div class="text-muted small">${escapeHtml(d.lemmas.map(prettyLemma).join(', '))}</div>`
+      : '';
+    return `<li>${pos}${escapeHtml(d.definition)}${lemmas}${example}</li>`;
   }).join('');
-  return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">dictionaryapi.dev</div><ol>${items}</ol>`;
+  return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">WordNet</div><ol>${items}</ol>`;
 }
 
 async function fetchDefinition(word) {
   if (definitionCache.has(word)) return definitionCache.get(word);
-  const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+  const resp = await fetch(`/v1/wordnet/dictionary?word=${encodeURIComponent(word)}`);
   if (!resp.ok) {
-    throw new Error('Definition lookup failed.');
+    const text = await resp.text();
+    throw new Error(text || 'Definition lookup failed.');
   }
   const data = await resp.json();
   definitionCache.set(word, data);

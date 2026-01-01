@@ -1,11 +1,42 @@
-    <div class="sticky-header mb-3">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="page-title d-flex flex-column">
-          <h1 class="h4 mb-1">{{title}}</h1>
-          <div class="nav-links small text-nowrap">
-            <a href="/">Solver</a> · <a href="/anagrams">Anagram</a> · <a href="/synonyms">Synonyms</a>
-          </div>
-        </div>
-        <button id="resetBtn" class="btn btn-outline-danger btn-lg">Reset</button>
+<div class="sticky-header mb-3">
+  <nav class="navbar navbar-expand-md px-0">
+    <div class="container-fluid px-0 d-flex flex-wrap align-items-start align-items-md-center gap-2">
+
+      <!-- Left: title -->
+      <div class="page-title">
+        <h1 class="h4 mb-1 mb-md-0">{{heading}}</h1>
       </div>
+
+      <!-- Right: controls stay together (no drifting) -->
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <!-- Mobile toggle -->
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#headerNav"
+          aria-controls="headerNav"
+          aria-expanded="false"
+          aria-label="Toggle navigation"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <button id="resetBtn" class="btn btn-outline-danger btn-sm px-3">
+          Reset
+        </button>
+      </div>
+
+      <!-- Collapsible nav: full-width on mobile, right-aligned; auto-width on desktop -->
+      <div class="collapse navbar-collapse w-100 w-md-auto order-3 order-md-2 mt-2 mt-md-0" id="headerNav">
+        <ul class="navbar-nav ms-md-auto text-end text-md-start">
+          <li class="nav-item"><a class="nav-link py-1 py-md-0" href="/">Solver</a></li>
+          <li class="nav-item"><a class="nav-link py-1 py-md-0" href="/anagrams">Anagram</a></li>
+          <li class="nav-item"><a class="nav-link py-1 py-md-0" href="/synonyms">Synonyms</a></li>
+          <li class="nav-item"><a class="nav-link py-1 py-md-0" href="/about">About</a></li>
+        </ul>
+      </div>
+
     </div>
+  </nav>
+</div>

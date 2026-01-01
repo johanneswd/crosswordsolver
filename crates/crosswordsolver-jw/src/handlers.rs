@@ -132,6 +132,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(frontend))
         .route("/anagrams", get(anagram_frontend))
         .route("/synonyms", get(synonyms_frontend))
+        .route("/about", get(about_frontend))
         .route("/robots.txt", get(robots))
         .route("/healthz", get(healthz))
         .route("/v1/matches", get(matches))
@@ -146,6 +147,7 @@ async fn healthz() -> impl IntoResponse {
 }
 
 async fn robots(State(state): State<AppState>) -> Response {
+    let body = "User-agent: *\nAllow: /";
     let headers = axum::http::HeaderMap::from_iter([
         (
             header::CONTENT_TYPE,
@@ -157,9 +159,9 @@ async fn robots(State(state): State<AppState>) -> Response {
         ),
     ]);
     if state.disable_cache {
-        return "User-agent: *\nDisallow: /".into_response();
+        return body.into_response();
     }
-    (headers, "User-agent: *\nDisallow: /").into_response()
+    (headers, body).into_response()
 }
 
 async fn frontend(State(state): State<AppState>) -> Response {
@@ -194,6 +196,21 @@ async fn anagram_frontend(State(state): State<AppState>) -> Response {
 
 async fn synonyms_frontend(State(state): State<AppState>) -> Response {
     let html = Html(synonyms_html());
+    if state.disable_cache {
+        return html.into_response();
+    }
+    (
+        [(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=3600, immutable"),
+        )],
+        html,
+    )
+        .into_response()
+}
+
+async fn about_frontend(State(state): State<AppState>) -> Response {
+    let html = Html(about_html());
     if state.disable_cache {
         return html.into_response();
     }
@@ -536,14 +553,23 @@ const FOOTER_HTML: &str = include_str!("../templates/footer.html");
 const SOLVER_BODY_HTML: &str = include_str!("../templates/solver_body.html");
 const ANAGRAM_BODY_HTML: &str = include_str!("../templates/anagram_body.html");
 const SYNONYMS_BODY_HTML: &str = include_str!("../templates/synonyms_body.html");
+const ABOUT_BODY_HTML: &str = include_str!("../templates/about_body.html");
 const SOLVER_SCRIPT: &str = include_str!("../templates/solver_script.js");
 const ANAGRAM_SCRIPT: &str = include_str!("../templates/anagram_script.js");
 const SYNONYMS_SCRIPT: &str = include_str!("../templates/synonyms_script.js");
+const ABOUT_SCRIPT: &str = include_str!("../templates/about_script.js");
 
-fn render_page(title: &str, body: &str, script: &str) -> String {
-    let header = HEADER_HTML.replace("{{title}}", title);
+fn render_page(
+    title: &str,
+    meta_description: &str,
+    heading: &str,
+    body: &str,
+    script: &str,
+) -> String {
+    let header = HEADER_HTML.replace("{{heading}}", heading);
     let base = BASE_HTML
         .replace("{{title}}", title)
+        .replace("{{meta_description}}", meta_description)
         .replace("{{style}}", STYLE_HTML)
         .replace("{{header}}", &header)
         .replace("{{body}}", body)
@@ -553,15 +579,43 @@ fn render_page(title: &str, body: &str, script: &str) -> String {
 }
 
 fn index_html() -> String {
-    render_page("Crossword Solver", SOLVER_BODY_HTML, SOLVER_SCRIPT)
+    render_page(
+        "Crossword Solver - Find Words by Pattern and Letters",
+        "Find crossword answers by entering known letters and gaps. This free crossword solver matches word patterns instantly and is easy to use.",
+        "Find Crossword Answers by Pattern and Known Letters",
+        SOLVER_BODY_HTML,
+        SOLVER_SCRIPT,
+    )
 }
 
 fn anagram_html() -> String {
-    render_page("Anagram Solver", ANAGRAM_BODY_HTML, ANAGRAM_SCRIPT)
+    render_page(
+        "Anagram Solver - With Known Letters and Word Length",
+        "Solve anagrams quickly, including partial anagrams with known letters. Filter by word length or position using this free anagram solver.",
+        "Solve Anagrams with Known Letters and Word Length",
+        ANAGRAM_BODY_HTML,
+        ANAGRAM_SCRIPT,
+    )
 }
 
 fn synonyms_html() -> String {
-    render_page("Synonyms", SYNONYMS_BODY_HTML, SYNONYMS_SCRIPT)
+    render_page(
+        "Synonym Finder and Thesaurus - Find Words by Meaning",
+        "Search a comprehensive thesaurus to find synonyms and related words. Useful for crossword clues, word puzzles and writing.",
+        "Find Synonyms and Related Words by Meaning",
+        SYNONYMS_BODY_HTML,
+        SYNONYMS_SCRIPT,
+    )
+}
+
+fn about_html() -> String {
+    render_page(
+        "Free Crossword Solver, Anagram and Synonym Finder",
+        "A fast, free crossword solver with pattern matching, anagram solving, synonyms and dictionary lookups. Simple to use and open to everyone.",
+        "A Fast, Free Crossword Solver for Patterns, Anagrams and Synonyms",
+        ABOUT_BODY_HTML,
+        ABOUT_SCRIPT,
+    )
 }
 
 fn parse_pos_filter(pos: Option<&str>) -> Result<Vec<Pos>, ApiError> {
