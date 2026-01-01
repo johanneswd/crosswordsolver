@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fs;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -6,7 +7,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{Dependency, Metadata, MetadataCommand, Package, PackageId};
 use clap::{Parser, Subcommand};
-use semver::Version;
+use semver::{Version, VersionReq};
+use toml_edit::{DocumentMut, Item, Value, value};
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -27,6 +29,13 @@ enum Commands {
         tag: String,
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+    },
+    CheckVersions,
+    UsePathDeps,
+    BumpVersion {
+        /// New version (e.g., 0.1.2 or v0.1.2)
+        #[arg(long)]
+        version: String,
     },
 }
 
@@ -53,6 +62,9 @@ fn main() -> Result<()> {
             );
         }
         Commands::Publish { tag, dry_run } => publish(&tag, dry_run)?,
+        Commands::CheckVersions => check_versions()?,
+        Commands::UsePathDeps => use_path_deps()?,
+        Commands::BumpVersion { version } => bump_version(&version)?,
     }
 
     Ok(())
@@ -66,44 +78,18 @@ struct WorkspaceInfo {
 fn check_tag(tag: &str) -> Result<WorkspaceInfo> {
     let tag_version = parse_tag(tag)?;
     let metadata = load_metadata()?;
-    let packages = collect_publishable(&metadata)?;
+    let info = validate_workspace_versions(&metadata)?;
+    check_internal_dependency_versions(&metadata)?;
 
-    if packages.is_empty() {
-        bail!("No publishable workspace packages found.");
-    }
-
-    let expected_version = packages[0].version.clone();
-    let mut mismatches = Vec::new();
-
-    for pkg in &packages {
-        if pkg.version != expected_version {
-            mismatches.push(pkg);
-        }
-    }
-
-    if !mismatches.is_empty() {
-        eprintln!("Version mismatch across publishable crates:");
-        for pkg in mismatches {
-            eprintln!(
-                "- {} ({}): found {}, expected {}",
-                pkg.name, pkg.manifest_path, pkg.version, expected_version
-            );
-        }
-        bail!("Publishable crate versions are not aligned.");
-    }
-
-    if expected_version != tag_version {
+    if info.version != tag_version {
         bail!(
             "Tag {} does not match workspace version {}.",
             tag,
-            expected_version
+            info.version
         );
     }
 
-    Ok(WorkspaceInfo {
-        version: expected_version,
-        packages,
-    })
+    Ok(info)
 }
 
 fn publish(tag: &str, dry_run: bool) -> Result<()> {
@@ -184,6 +170,39 @@ fn collect_publishable(metadata: &Metadata) -> Result<Vec<PublishablePackage>> {
     }
 
     Ok(packages)
+}
+
+fn validate_workspace_versions(metadata: &Metadata) -> Result<WorkspaceInfo> {
+    let packages = collect_publishable(metadata)?;
+
+    if packages.is_empty() {
+        bail!("No publishable workspace packages found.");
+    }
+
+    let expected_version = packages[0].version.clone();
+    let mut mismatches = Vec::new();
+
+    for pkg in &packages {
+        if pkg.version != expected_version {
+            mismatches.push(pkg);
+        }
+    }
+
+    if !mismatches.is_empty() {
+        eprintln!("Version mismatch across publishable crates:");
+        for pkg in mismatches {
+            eprintln!(
+                "- {} ({}): found {}, expected {}",
+                pkg.name, pkg.manifest_path, pkg.version, expected_version
+            );
+        }
+        bail!("Publishable crate versions are not aligned.");
+    }
+
+    Ok(WorkspaceInfo {
+        version: expected_version,
+        packages,
+    })
 }
 
 fn is_publishable(pkg: &Package) -> bool {
@@ -293,4 +312,230 @@ fn should_retry(stderr: &str) -> bool {
 
 fn err_is_retryable(err: &anyhow::Error) -> bool {
     should_retry(&err.to_string())
+}
+
+fn check_versions() -> Result<()> {
+    let metadata = load_metadata()?;
+    let info = validate_workspace_versions(&metadata)?;
+    check_internal_dependency_versions(&metadata)?;
+    println!(
+        "Workspace version {} aligned across {} publishable crates; internal dependency versions are explicit and matching.",
+        info.version,
+        info.packages.len()
+    );
+    Ok(())
+}
+
+fn bump_version(input: &str) -> Result<()> {
+    let parsed = if let Some(stripped) = input.strip_prefix('v') {
+        Version::parse(stripped)?
+    } else {
+        Version::parse(input)?
+    };
+    let new_version = parsed.to_string();
+
+    let metadata = load_metadata()?;
+    let workspace_root = metadata.workspace_root.as_std_path().to_path_buf();
+    let root_toml = workspace_root.join("Cargo.toml");
+
+    update_root_version(&root_toml, &new_version)?;
+    update_path_dependency_versions(&metadata, &new_version)?;
+
+    let status = Command::new("cargo")
+        .arg("update")
+        .status()
+        .context("Failed to run cargo update")?;
+    if !status.success() {
+        bail!("cargo update failed with status {}", status);
+    }
+
+    println!(
+        "Bumped workspace version to {} and updated path dependency versions; Cargo.lock refreshed.",
+        new_version
+    );
+    Ok(())
+}
+
+fn use_path_deps() -> Result<()> {
+    let metadata = load_metadata()?;
+    set_path_deps_to_local(&metadata)?;
+
+    let status = Command::new("cargo")
+        .arg("update")
+        .status()
+        .context("Failed to run cargo update")?;
+    if !status.success() {
+        bail!("cargo update failed with status {}", status);
+    }
+
+    println!("Switched workspace internal dependencies to path-only and refreshed Cargo.lock.");
+    Ok(())
+}
+
+fn update_root_version(path: &std::path::Path, new_version: &str) -> Result<()> {
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
+    let mut doc = contents
+        .parse::<DocumentMut>()
+        .with_context(|| format!("Parsing {}", path.display()))?;
+
+    let workspace = doc
+        .get_mut("workspace")
+        .and_then(Item::as_table_like_mut)
+        .context("Missing [workspace]")?;
+    let pkg = workspace
+        .get_mut("package")
+        .and_then(Item::as_table_like_mut)
+        .context("Missing [workspace.package]")?;
+    pkg.insert("version", value(new_version));
+
+    fs::write(path, doc.to_string()).with_context(|| format!("Writing {}", path.display()))?;
+    Ok(())
+}
+
+fn update_path_dependency_versions(metadata: &Metadata, new_version: &str) -> Result<()> {
+    let workspace_ids: HashSet<_> = metadata.workspace_members.iter().collect();
+    let workspace_names: HashSet<_> = metadata
+        .packages
+        .iter()
+        .filter(|p| workspace_ids.contains(&p.id))
+        .map(|p| p.name.clone())
+        .collect();
+
+    for pkg in &metadata.packages {
+        if !workspace_ids.contains(&pkg.id) {
+            continue;
+        }
+
+        let manifest_path = pkg.manifest_path.as_std_path();
+        let mut doc = fs::read_to_string(manifest_path)
+            .with_context(|| format!("Reading {}", manifest_path.display()))?
+            .parse::<DocumentMut>()
+            .with_context(|| format!("Parsing {}", manifest_path.display()))?;
+
+        for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(table) = doc.get_mut(section).and_then(Item::as_table_like_mut) {
+                for (dep_name, item) in table.iter_mut() {
+                    if !workspace_names.contains(dep_name.get()) {
+                        continue;
+                    }
+
+                    match item {
+                        Item::Table(dep_table) => {
+                            if dep_table.get("path").is_some() {
+                                dep_table.insert("version", value(new_version));
+                            }
+                        }
+                        Item::Value(val) => {
+                            if let Some(inline) = val.as_inline_table_mut()
+                                && inline.get("path").is_some()
+                            {
+                                inline.insert("version", Value::from(new_version));
+                                inline.fmt();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        fs::write(manifest_path, doc.to_string())
+            .with_context(|| format!("Writing {}", manifest_path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn check_internal_dependency_versions(metadata: &Metadata) -> Result<()> {
+    let workspace_ids: HashSet<_> = metadata.workspace_members.iter().collect();
+    let mut workspace_versions: HashMap<String, Version> = HashMap::new();
+    for pkg in &metadata.packages {
+        if workspace_ids.contains(&pkg.id) {
+            workspace_versions.insert(pkg.name.clone(), pkg.version.clone());
+        }
+    }
+
+    let mut errors = Vec::new();
+    for pkg in &metadata.packages {
+        if !workspace_ids.contains(&pkg.id) {
+            continue;
+        }
+        for dep in &pkg.dependencies {
+            if let Some(dep_version) = workspace_versions.get(&dep.name) {
+                let req = &dep.req;
+                let expected_req = VersionReq::parse(&dep_version.to_string())?;
+                if req == &VersionReq::STAR {
+                    errors.push(format!(
+                        "{}: dependency on {} must specify a version (found wildcard)",
+                        pkg.name, dep.name
+                    ));
+                } else if req != &expected_req {
+                    errors.push(format!(
+                        "{}: dependency on {} has version requirement {} but expected {}",
+                        pkg.name, dep.name, req, expected_req
+                    ));
+                }
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        bail!("Dependency version errors:\n{}", errors.join("\n"))
+    }
+}
+
+fn set_path_deps_to_local(metadata: &Metadata) -> Result<()> {
+    let workspace_ids: HashSet<_> = metadata.workspace_members.iter().collect();
+    let workspace_names: HashSet<_> = metadata
+        .packages
+        .iter()
+        .filter(|p| workspace_ids.contains(&p.id))
+        .map(|p| p.name.clone())
+        .collect();
+
+    for pkg in &metadata.packages {
+        if !workspace_ids.contains(&pkg.id) {
+            continue;
+        }
+
+        let manifest_path = pkg.manifest_path.as_std_path();
+        let mut doc = fs::read_to_string(manifest_path)
+            .with_context(|| format!("Reading {}", manifest_path.display()))?
+            .parse::<DocumentMut>()
+            .with_context(|| format!("Parsing {}", manifest_path.display()))?;
+
+        for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(table) = doc.get_mut(section).and_then(Item::as_table_like_mut) {
+                for (dep_name, item) in table.iter_mut() {
+                    if !workspace_names.contains(dep_name.get()) {
+                        continue;
+                    }
+                    match item {
+                        Item::Table(dep_table) => {
+                            if dep_table.get("path").is_some() {
+                                dep_table.remove("version");
+                            }
+                        }
+                        Item::Value(val) => {
+                            if let Some(inline) = val.as_inline_table_mut()
+                                && inline.get("path").is_some()
+                            {
+                                inline.remove("version");
+                                inline.fmt();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        fs::write(manifest_path, doc.to_string())
+            .with_context(|| format!("Writing {}", manifest_path.display()))?;
+    }
+
+    Ok(())
 }
