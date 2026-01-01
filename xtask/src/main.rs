@@ -213,14 +213,12 @@ fn is_publishable(pkg: &Package) -> bool {
 }
 
 fn dependency_target_name(dep: &Dependency) -> &str {
-    dep.package.as_deref().unwrap_or(dep.name.as_str())
+    // `name` stores the real package name; `rename` only captures an alias in Cargo.toml
+    dep.name.as_str()
 }
 
 fn is_publish_dependency(dep: &Dependency) -> bool {
-    matches!(
-        dep.kind,
-        None | Some(DependencyKind::Normal | DependencyKind::Build)
-    )
+    matches!(dep.kind, DependencyKind::Normal | DependencyKind::Build)
 }
 
 fn topological_sort(packages: &[PublishablePackage]) -> Result<Vec<PublishablePackage>> {

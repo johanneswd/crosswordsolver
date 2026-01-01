@@ -253,7 +253,7 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
 name = "crosswordsolver-jw"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "array-init",
@@ -1191,7 +1191,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "wordnet-db"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "memmap2",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "wordnet-morphy"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "wordnet-db",
@@ -1209,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "wordnet-types"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "wyz"

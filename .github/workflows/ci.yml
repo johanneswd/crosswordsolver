@@ -11,6 +11,7 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_HOME: ${{ github.workspace }}/.cargo
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
+  WORDNET_DIR: ${{ github.workspace }}/open_english_wordnet_2024/oewn2024
 
 jobs:
   fmt:
@@ -60,5 +61,13 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
           save-always: true
+      - uses: actions/cache@v4
+        with:
+          path: |
+            open_english_wordnet_2024
+            open_english_wordnet_2024.zip
+          key: ${{ runner.os }}-wordnet-2024
+          save-always: true
+      - run: python3 download_wordnet.py
       - run: cargo fetch --locked
       - run: cargo test --workspace --all-features --locked
