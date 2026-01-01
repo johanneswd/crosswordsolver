@@ -2,6 +2,8 @@
 
 A Rust web service (Axum + Tokio) that loads a wordlist into an in-memory bitset index and serves pattern-based word matches with pagination. Words are normalized to lowercase ASCII, bucketed by length, and indexed with positional bitsets so each query ANDs the relevant positions to rapidly filter candidates; optional must/cannot letter filters use contains bitsets. A simple Bootstrap front-end at `/` lets you pick word length, type a pattern (letters + blanks), and scroll through results; the API lives at `/v1/matches`, and `/healthz` reports readiness. Robots are disallowed via `/robots.txt`.
 
+WordNet is bundled for dictionary + related-word lookups (used by the popovers and the synonyms page) via `/v1/wordnet/dictionary` and `/v1/wordnet/related`.
+
 Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadthewordlist.com/) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 ## Workspace crates
@@ -17,21 +19,26 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
    ```bash
    cargo test -p crosswordsolver-jw
    ```
-3) Start the server (defaults to `0.0.0.0:8080` and `WORDLIST_PATH=words.txt`):
+3) Ensure WordNet data is present (default `open_english_wordnet_2024/oewn2024` from `download_wordnet.py`, or supply `--wordnet-dir <path>`).
+4) Start the server (defaults to `0.0.0.0:8080` and `WORDLIST_PATH=words.txt`):
    ```bash
    cargo run -p crosswordsolver-jw --bin crosswordsolver
    ```
-4) Open http://localhost:8080/ to use the UI, or call the API:
+5) Open http://localhost:8080/ to use the UI, or call the API:
    ```bash
    curl "http://localhost:8080/v1/matches?pattern=a__le&page=1&page_size=50"
+   curl "http://localhost:8080/v1/wordnet/dictionary?word=dogs"
    ```
 
 ## Configuration
 - `HOST` (default `0.0.0.0`)
 - `PORT` (default `8080`)
 - `WORDLIST_PATH` (default `/app/words.txt`; override to point at your list)
+- `WORDNET_DIR` (default `/app/wordnet` in Docker or `open_english_wordnet_2024/oewn2024` locally)
+- `WORDNET_LOAD_MODE` (`mmap` default, `owned` to read files into memory)
 - `RUST_LOG` (set log level, e.g., `debug`)
 - CLI flag: `--no-cache` disables cache-control headers (useful during local dev or when proxies get in the way)
+- CLI flags: `--wordnet-dir <path>` to point at a downloaded dict; `--wordnet-mode=owned|mmap` to override load mode
 - `RATE_LIMIT_RPS` (default 5) and `RATE_LIMIT_BURST` (default 10) control the per-IP rate limiter (only applied when `Fly-Client-IP` header is present)
 
 ## CI/CD
@@ -55,3 +62,4 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 docker build -t crosswordsolver .
 docker run -p 8080:8080 crosswordsolver
 ```
+The image downloads and bundles Open English WordNet under `/app/wordnet` by default.

@@ -6,6 +6,8 @@ use tower::util::ServiceExt;
 
 use crosswordsolver_jw::handlers::{AppState, router};
 use crosswordsolver_jw::index::WordIndex;
+use wordnet_db::{LoadMode, WordNet};
+use wordnet_morphy::Morphy;
 
 fn make_state() -> AppState {
     let words = b"apple\nangle\nankle\naddle\nample\n";
@@ -13,11 +15,39 @@ fn make_state() -> AppState {
     let path = tempdir.path().join("words.txt");
     std::fs::write(&path, words).unwrap();
     let index = WordIndex::build_from_file(&path).unwrap();
+    let (wordnet, morphy) = wordnet_fixture();
     AppState {
         index: Arc::clone(&index),
+        wordnet,
+        morphy,
         max_page_size: 500,
         disable_cache: false,
     }
+}
+
+fn wordnet_fixture() -> (Arc<WordNet>, Arc<Morphy>) {
+    let mut candidates = vec![
+        std::env::var("WORDNET_DIR")
+            .map(std::path::PathBuf::from)
+            .ok(),
+        Some(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../open_english_wordnet_2024/oewn2024"),
+        ),
+        Some(std::path::PathBuf::from(
+            "open_english_wordnet_2024/oewn2024",
+        )),
+        Some(std::path::PathBuf::from("/app/wordnet")),
+    ];
+    let dir = candidates
+        .iter_mut()
+        .flatten()
+        .find(|p| p.exists())
+        .cloned()
+        .unwrap_or_else(|| panic!("WordNet fixture not found; run download_wordnet.py"));
+    let wn = WordNet::load_with_mode(&dir, LoadMode::Owned).expect("load wordnet fixture");
+    let morph = Morphy::load(&dir).expect("load morphy fixture");
+    (Arc::new(wn), Arc::new(morph))
 }
 
 #[tokio::test]

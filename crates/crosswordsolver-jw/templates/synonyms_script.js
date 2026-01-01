@@ -2,7 +2,8 @@ const wordInput = document.getElementById('wordInput');
 const solveBtn = document.getElementById('solveBtn');
 const resetBtn = document.getElementById('resetBtn');
 const statusEl = document.getElementById('status');
-const resultsList = document.getElementById('resultsList');
+const dictionaryList = document.getElementById('dictionaryList');
+const relatedList = document.getElementById('relatedList');
 const definitionCache = new Map();
 let popoverEl = null;
 let popoverWord = '';
@@ -18,6 +19,10 @@ function escapeHtml(str) {
     '"': '&quot;',
     "'": '&#39;',
   }[ch]));
+}
+
+function prettyLemma(lemma) {
+  return (lemma || '').replace(/_/g, ' ');
 }
 
 function ensurePopover() {
@@ -52,37 +57,34 @@ function positionPopover(target) {
   pop.style.visibility = 'visible';
 }
 
-function renderDefinitions(word, entries) {
-  const defs = [];
-  entries.forEach(entry => {
-    (entry.meanings || []).forEach(meaning => {
-      (meaning.definitions || []).forEach(def => {
-        if (defs.length < 5) {
-          defs.push({
-            partOfSpeech: meaning.partOfSpeech || '',
-            definition: def.definition || '',
-            example: def.example || '',
-          });
-        }
-      });
-    });
-  });
+function renderDefinitions(word, data) {
+  const results = (data && data.results) || [];
+  const defs = results.slice(0, 5).map(res => ({
+    pos: res.pos || '',
+    definition: res.definition || '',
+    example: (res.examples && res.examples[0]) || '',
+    lemmas: res.lemmas || [],
+  }));
   if (!defs.length) {
-    return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">dictionaryapi.dev</div><div class="text-muted">No definition found.</div>`;
+    return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">WordNet</div><div class="text-muted">No definition found.</div>`;
   }
   const items = defs.map(d => {
-    const pos = d.partOfSpeech ? `<span class="text-muted">${escapeHtml(d.partOfSpeech)}</span> ` : '';
+    const pos = d.pos ? `<span class="text-muted">${escapeHtml(d.pos)}</span> ` : '';
     const example = d.example ? `<div class="text-muted small mt-1">“${escapeHtml(d.example)}”</div>` : '';
-    return `<li>${pos}${escapeHtml(d.definition)}${example}</li>`;
+    const lemmas = d.lemmas && d.lemmas.length
+      ? `<div class="text-muted small">${escapeHtml(d.lemmas.map(prettyLemma).join(', '))}</div>`
+      : '';
+    return `<li>${pos}${escapeHtml(d.definition)}${lemmas}${example}</li>`;
   }).join('');
-  return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">dictionaryapi.dev</div><ol>${items}</ol>`;
+  return `<h3>${escapeHtml(word)}</h3><div class="source mb-2">WordNet</div><ol>${items}</ol>`;
 }
 
 async function fetchDefinition(word) {
   if (definitionCache.has(word)) return definitionCache.get(word);
-  const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+  const resp = await fetch(`/v1/wordnet/dictionary?word=${encodeURIComponent(word)}`);
   if (!resp.ok) {
-    throw new Error('Definition lookup failed.');
+    const text = await resp.text();
+    throw new Error(text || 'Definition lookup failed.');
   }
   const data = await resp.json();
   definitionCache.set(word, data);
@@ -114,78 +116,208 @@ function handleDefinitionRequest(word, target) {
 }
 
 function handleResultClick(e) {
-  const li = e.target.closest('li[data-word]');
-  if (!li) return;
-  const word = li.dataset.word;
-  handleDefinitionRequest(word, li);
+  const el = e.target.closest('[data-word]');
+  if (!el) return;
+  const word = el.dataset.word;
+  if (!word) return;
+  handleDefinitionRequest(word, el);
 }
 
 function handleResultKeydown(e) {
   if (e.key !== 'Enter' && e.key !== ' ') return;
-  const li = e.target.closest('li[data-word]');
-  if (!li) return;
+  const el = e.target.closest('[data-word]');
+  if (!el) return;
   e.preventDefault();
-  const word = li.dataset.word;
-  handleDefinitionRequest(word, li);
+  const word = el.dataset.word;
+  if (!word) return;
+  handleDefinitionRequest(word, el);
 }
 
 function clearResults() {
-  resultsList.innerHTML = '';
+  dictionaryList.innerHTML = '';
+  relatedList.innerHTML = '';
   hidePopover();
 }
 
-function uniqueWords(list) {
-  const seen = new Set();
-  const deduped = [];
-  list.forEach(w => {
-    const key = w.toLowerCase();
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      deduped.push(w);
-    }
-  });
-  return deduped;
+function relationOrder(kind) {
+  const order = [
+    'hypernyms',
+    'hyponyms',
+    'similar_to',
+    'antonyms',
+    'derivations',
+    'also_see',
+    'entails',
+    'causes',
+    'verb_group',
+    'attributes',
+    'participle',
+    'pertainyms',
+    'member_meronyms',
+    'part_meronyms',
+    'substance_meronyms',
+    'member_holonyms',
+    'part_holonyms',
+    'substance_holonyms',
+    'topic_domain',
+    'topic_members',
+    'region_domain',
+    'region_members',
+    'usage_domain',
+    'usage_members',
+  ];
+  const idx = order.indexOf(kind);
+  return idx === -1 ? order.length : idx;
 }
 
-async function fetchWords(url) {
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('Failed to fetch suggestions.');
-  return resp.json();
-}
-
-function renderGroup(title, words) {
-  const wrapper = document.createElement('div');
-  const heading = document.createElement('h3');
-  heading.className = 'h6 text-muted mb-2';
-  heading.textContent = title;
-  wrapper.appendChild(heading);
-
-  const list = document.createElement('ul');
-  list.className = 'list-group results-list';
-  if (!words.length) {
-    const li = document.createElement('li');
-    li.className = 'list-group-item text-muted';
-    li.textContent = 'None found.';
-    list.appendChild(li);
-  } else {
-    words.forEach(word => {
-      const li = document.createElement('li');
-      li.className = 'list-group-item fs-5 word-item';
-      li.textContent = word;
-      li.dataset.word = word;
-      li.setAttribute('role', 'button');
-      li.tabIndex = 0;
-      list.appendChild(li);
-    });
+function renderDictionary(synsets) {
+  dictionaryList.innerHTML = '';
+  if (!synsets || !synsets.length) {
+    dictionaryList.innerHTML = '<div class="text-muted">No definitions found.</div>';
+    return;
   }
-  wrapper.appendChild(list);
-  resultsList.appendChild(wrapper);
+  synsets.slice(0, 8).forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'card shadow-sm';
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const header = document.createElement('div');
+    header.className = 'd-flex justify-content-between align-items-center mb-2';
+    const lemmas = document.createElement('div');
+    lemmas.className = 'fw-semibold';
+    lemmas.textContent = (s.lemmas || []).map(prettyLemma).join(', ');
+    lemmas.dataset.word = (s.lemmas && s.lemmas[0]) || '';
+    lemmas.setAttribute('role', 'button');
+    lemmas.tabIndex = 0;
+    const pos = document.createElement('span');
+    pos.className = 'badge text-bg-light text-dark';
+    pos.textContent = s.pos || '';
+    header.appendChild(lemmas);
+    header.appendChild(pos);
+
+    const def = document.createElement('div');
+    def.textContent = s.definition || '';
+    body.appendChild(header);
+    body.appendChild(def);
+    if (s.examples && s.examples.length) {
+      const example = document.createElement('div');
+      example.className = 'text-muted small mt-2';
+      example.textContent = `“${s.examples[0]}”`;
+      body.appendChild(example);
+    }
+    card.appendChild(body);
+    dictionaryList.appendChild(card);
+  });
+}
+
+function aggregateRelations(synsets) {
+  const map = new Map();
+  (synsets || []).forEach(s => {
+    (s.relations || []).forEach(group => {
+      const key = group.kind || group.label;
+      if (!map.has(key)) {
+        map.set(key, {
+          kind: group.kind || key,
+          label: group.label || key,
+          symbol: group.symbol || '',
+          targets: [],
+        });
+      }
+      const entry = map.get(key);
+      (group.targets || []).forEach(t => {
+        const id = `${t.synset_id.pos}-${t.synset_id.offset}`;
+        if (!entry.targets.some(existing => `${existing.synset_id.pos}-${existing.synset_id.offset}` === id)) {
+          entry.targets.push(t);
+        }
+      });
+    });
+  });
+  const groups = Array.from(map.values());
+  groups.sort((a, b) => relationOrder(a.kind) - relationOrder(b.kind) || a.label.localeCompare(b.label));
+  groups.forEach(group => {
+    group.targets.sort((a, b) => {
+      const sa = a.sense_count || 0;
+      const sb = b.sense_count || 0;
+      if (sa !== sb) return sb - sa;
+      const la = (a.lemmas && a.lemmas[0]) ? a.lemmas[0].toLowerCase() : '';
+      const lb = (b.lemmas && b.lemmas[0]) ? b.lemmas[0].toLowerCase() : '';
+      return la.localeCompare(lb);
+    });
+  });
+  return groups;
+}
+
+function renderRelations(groups) {
+  relatedList.innerHTML = '';
+  if (!groups || !groups.length) {
+    relatedList.innerHTML = '<div class="text-muted">No related words found.</div>';
+    return;
+  }
+  groups.forEach(group => {
+    const card = document.createElement('div');
+    card.className = 'card shadow-sm';
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const title = document.createElement('div');
+    title.className = 'd-flex justify-content-between align-items-center mb-2';
+    const label = document.createElement('h3');
+    label.className = 'h6 mb-0';
+    label.textContent = group.label;
+    const symbol = document.createElement('span');
+    symbol.className = 'badge text-bg-light text-dark';
+    symbol.textContent = group.symbol || '';
+    title.appendChild(label);
+    title.appendChild(symbol);
+    body.appendChild(title);
+
+    if (!group.targets.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted';
+      empty.textContent = 'None found.';
+      body.appendChild(empty);
+    } else {
+      const list = document.createElement('ul');
+      list.className = 'list-group results-list';
+      group.targets.forEach(target => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item';
+        li.dataset.word = (target.lemmas && target.lemmas[0]) || '';
+        li.setAttribute('role', 'button');
+        li.tabIndex = 0;
+
+        const header = document.createElement('div');
+        header.className = 'd-flex justify-content-between align-items-center';
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'fw-semibold word-item';
+        wordSpan.textContent = (target.lemmas || []).map(prettyLemma).join(', ');
+        const pos = document.createElement('span');
+        pos.className = 'badge text-bg-light text-dark';
+        pos.textContent = target.pos || '';
+        header.appendChild(wordSpan);
+        header.appendChild(pos);
+        li.appendChild(header);
+
+        if (target.definition) {
+          const def = document.createElement('div');
+          def.className = 'text-muted small mt-1';
+          def.textContent = target.definition;
+          li.appendChild(def);
+        }
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+    }
+    card.appendChild(body);
+    relatedList.appendChild(card);
+  });
 }
 
 async function runSearch() {
   const word = wordInput.value.trim().toLowerCase();
   if (!word) {
     statusEl.textContent = 'Word is required.';
+    statusEl.classList.remove('text-danger');
+    statusEl.classList.add('text-muted');
     return;
   }
   if (loading) return;
@@ -195,32 +327,27 @@ async function runSearch() {
   statusEl.textContent = 'Loading...';
   clearResults();
   try {
-    const encoded = encodeURIComponent(word);
-    const [synData, relData, simData] = await Promise.all([
-      fetchWords(`https://api.datamuse.com/words?max=30&rel_syn=${encoded}`),
-      fetchWords(`https://api.datamuse.com/words?max=30&rel_trg=${encoded}`),
-      fetchWords(`https://api.datamuse.com/words?max=30&ml=${encoded}`),
-    ]);
-    const synonyms = uniqueWords((synData || []).map(entry => entry.word).filter(Boolean));
-    const related = uniqueWords((relData || []).map(entry => entry.word).filter(Boolean));
-    const similar = uniqueWords((simData || []).map(entry => entry.word).filter(Boolean));
-
-    if (!synonyms.length && !related.length && !similar.length) {
-      statusEl.textContent = 'No related words found.';
-      resultsList.innerHTML = '<div class="text-muted">Try another word.</div>';
-      return;
+    const resp = await fetch(`/v1/wordnet/related?word=${encodeURIComponent(word)}`);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to fetch related words.');
     }
-
-    renderGroup('Synonyms', synonyms);
-    renderGroup('Related words', related);
-    renderGroup('Similar meaning', similar);
-    statusEl.textContent = 'Click a word for a definition.';
+    const data = await resp.json();
+    renderDictionary(data.synsets || []);
+    const groups = aggregateRelations(data.synsets || []);
+    renderRelations(groups);
+    if (data.note) {
+      statusEl.textContent = data.note;
+    } else {
+      statusEl.textContent = 'Click any word to see definitions.';
+    }
   } catch (err) {
     statusEl.classList.remove('text-muted');
     statusEl.classList.add('text-danger');
     const message = err.message || 'Error fetching suggestions.';
     statusEl.textContent = message;
-    resultsList.innerHTML = `<div class="text-danger">${escapeHtml(message)}</div>`;
+    relatedList.innerHTML = `<div class="text-danger">${escapeHtml(message)}</div>`;
+    dictionaryList.innerHTML = '';
   } finally {
     loading = false;
   }
@@ -237,8 +364,10 @@ function resetAll() {
 
 solveBtn.addEventListener('click', runSearch);
 resetBtn.addEventListener('click', resetAll);
-resultsList.addEventListener('click', handleResultClick);
-resultsList.addEventListener('keydown', handleResultKeydown);
+dictionaryList.addEventListener('click', handleResultClick);
+relatedList.addEventListener('click', handleResultClick);
+dictionaryList.addEventListener('keydown', handleResultKeydown);
+relatedList.addEventListener('keydown', handleResultKeydown);
 wordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -249,7 +378,7 @@ wordInput.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   if (!popoverEl || popoverEl.style.display !== 'block') return;
   if (popoverEl.contains(e.target)) return;
-  if (resultsList.contains(e.target)) return;
+  if (relatedList.contains(e.target) || dictionaryList.contains(e.target)) return;
   hidePopover();
 });
 

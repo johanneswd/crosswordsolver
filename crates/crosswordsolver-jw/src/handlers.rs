@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -8,6 +9,9 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
+use wordnet_db::WordNet;
+use wordnet_morphy::Morphy;
+use wordnet_types::{Pos, Synset, SynsetId};
 
 use crate::index::{
     AnagramParams, MAX_WORD_LEN, QueryParams, WordIndex, parse_letter_bag, parse_letters,
@@ -17,6 +21,8 @@ use crate::index::{
 #[derive(Clone)]
 pub struct AppState {
     pub index: Arc<WordIndex>,
+    pub wordnet: Arc<WordNet>,
+    pub morphy: Arc<Morphy>,
     pub max_page_size: usize,
     pub disable_cache: bool,
 }
@@ -53,6 +59,74 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Deserialize)]
+pub struct WordNetQuery {
+    pub word: String,
+    pub pos: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct SynsetIdResponse {
+    pos: char,
+    offset: u32,
+}
+
+#[derive(Serialize)]
+struct DictionarySynset {
+    pos: String,
+    synset_id: SynsetIdResponse,
+    lemmas: Vec<String>,
+    definition: String,
+    examples: Vec<String>,
+    sense_count: Option<u32>,
+}
+
+#[derive(Serialize)]
+pub struct DictionaryResponse {
+    word: String,
+    normalized: String,
+    lemmas: Vec<String>,
+    results: Vec<DictionarySynset>,
+    note: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct RelatedTarget {
+    pos: String,
+    synset_id: SynsetIdResponse,
+    lemmas: Vec<String>,
+    definition: String,
+    sense_count: Option<u32>,
+}
+
+#[derive(Serialize, Clone)]
+struct RelationGroup {
+    kind: String,
+    label: String,
+    symbol: String,
+    targets: Vec<RelatedTarget>,
+}
+
+#[derive(Serialize, Clone)]
+struct RelatedSynset {
+    pos: String,
+    synset_id: SynsetIdResponse,
+    lemmas: Vec<String>,
+    definition: String,
+    examples: Vec<String>,
+    sense_count: Option<u32>,
+    relations: Vec<RelationGroup>,
+}
+
+#[derive(Serialize)]
+struct RelatedResponse {
+    word: String,
+    normalized: String,
+    lemmas: Vec<String>,
+    synsets: Vec<RelatedSynset>,
+    note: Option<String>,
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(frontend))
@@ -62,6 +136,8 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .route("/v1/matches", get(matches))
         .route("/v1/anagrams", get(anagrams))
+        .route("/v1/wordnet/dictionary", get(dictionary_lookup))
+        .route("/v1/wordnet/related", get(related_words))
         .with_state(state)
 }
 
@@ -183,6 +259,176 @@ async fn matches(
             [(
                 header::CACHE_CONTROL,
                 HeaderValue::from_static("public, max-age=300"),
+            )],
+            Json(response),
+        )
+            .into_response())
+    }
+}
+
+async fn dictionary_lookup(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<WordNetQuery>,
+) -> Result<Response, ApiError> {
+    let word = params.word.trim();
+    if word.is_empty() {
+        return Err(ApiError::bad_request("word is required"));
+    }
+    let normalized = word.to_ascii_lowercase();
+    let pos_filter = parse_pos_filter(params.pos.as_deref())?;
+
+    let mut seen_lemmas = HashSet::new();
+    let mut lemmas = Vec::new();
+    let mut synsets: HashMap<SynsetId, DictionarySynset> = HashMap::new();
+
+    for pos in pos_filter {
+        let candidates = state
+            .morphy
+            .lemmas_for(pos, word, |p, lemma| state.wordnet.lemma_exists(p, lemma));
+        for cand in candidates {
+            let lemma = cand.lemma.to_string();
+            if seen_lemmas.insert(lemma.clone()) {
+                lemmas.push(lemma.clone());
+            }
+            for sid in state.wordnet.synsets_for_lemma(pos, &lemma) {
+                if let Some(syn) = state.wordnet.get_synset(*sid) {
+                    let entry = synsets.entry(*sid).or_insert_with(|| DictionarySynset {
+                        pos: pos_label(syn.id.pos).to_string(),
+                        synset_id: synset_id_response(syn.id),
+                        lemmas: syn.words.iter().map(|w| w.text.to_string()).collect(),
+                        definition: syn.gloss.definition.to_string(),
+                        examples: syn.gloss.examples.iter().map(|e| e.to_string()).collect(),
+                        sense_count: None,
+                    });
+                    if let Some(count) = state.wordnet.sense_count(pos, &lemma, sid.offset) {
+                        entry.sense_count = match entry.sense_count {
+                            Some(existing) if existing >= count => Some(existing),
+                            _ => Some(count),
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    let mut results: Vec<_> = synsets.into_values().collect();
+    results.sort_by(|a, b| {
+        let sa = a.sense_count.unwrap_or(0);
+        let sb = b.sense_count.unwrap_or(0);
+        sb.cmp(&sa)
+            .then_with(|| {
+                pos_order(char_to_pos(a.synset_id.pos))
+                    .cmp(&pos_order(char_to_pos(b.synset_id.pos)))
+            })
+            .then_with(|| a.synset_id.offset.cmp(&b.synset_id.offset))
+    });
+
+    let note = if results.is_empty() {
+        Some(format!("no WordNet entries found for \"{word}\""))
+    } else {
+        None
+    };
+
+    let response = DictionaryResponse {
+        word: word.to_string(),
+        normalized,
+        lemmas,
+        results,
+        note,
+    };
+
+    if state.disable_cache {
+        Ok(Json(response).into_response())
+    } else {
+        Ok((
+            [(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=3600"),
+            )],
+            Json(response),
+        )
+            .into_response())
+    }
+}
+
+async fn related_words(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<WordNetQuery>,
+) -> Result<Response, ApiError> {
+    let word = params.word.trim();
+    if word.is_empty() {
+        return Err(ApiError::bad_request("word is required"));
+    }
+    let normalized = word.to_ascii_lowercase();
+    let pos_filter = parse_pos_filter(params.pos.as_deref())?;
+
+    let mut seen_lemmas = HashSet::new();
+    let mut lemmas = Vec::new();
+    let mut seen_synsets = HashSet::new();
+    let mut synsets_out = Vec::new();
+
+    for pos in pos_filter {
+        let candidates = state
+            .morphy
+            .lemmas_for(pos, word, |p, lemma| state.wordnet.lemma_exists(p, lemma));
+        for cand in candidates {
+            let lemma = cand.lemma.to_string();
+            if seen_lemmas.insert(lemma.clone()) {
+                lemmas.push(lemma.clone());
+            }
+            for sid in state.wordnet.synsets_for_lemma(pos, &lemma) {
+                if !seen_synsets.insert(*sid) {
+                    continue;
+                }
+                if let Some(syn) = state.wordnet.get_synset(*sid) {
+                    let sense_count = best_sense_count_for_synset(&state.wordnet, &syn, &lemmas);
+                    let relations = collect_relations(&state.wordnet, &syn);
+                    synsets_out.push(RelatedSynset {
+                        pos: pos_label(syn.id.pos).to_string(),
+                        synset_id: synset_id_response(syn.id),
+                        lemmas: syn.words.iter().map(|w| w.text.to_string()).collect(),
+                        definition: syn.gloss.definition.to_string(),
+                        examples: syn.gloss.examples.iter().map(|e| e.to_string()).collect(),
+                        sense_count,
+                        relations,
+                    });
+                }
+            }
+        }
+    }
+
+    synsets_out.sort_by(|a, b| {
+        let sa = a.sense_count.unwrap_or(0);
+        let sb = b.sense_count.unwrap_or(0);
+        sb.cmp(&sa)
+            .then_with(|| {
+                pos_order(char_to_pos(a.synset_id.pos))
+                    .cmp(&pos_order(char_to_pos(b.synset_id.pos)))
+            })
+            .then_with(|| a.synset_id.offset.cmp(&b.synset_id.offset))
+    });
+
+    let note = if synsets_out.is_empty() {
+        Some(format!("no WordNet entries found for \"{word}\""))
+    } else {
+        None
+    };
+
+    let response = RelatedResponse {
+        word: word.to_string(),
+        normalized,
+        lemmas,
+        synsets: synsets_out,
+        note,
+    };
+
+    if state.disable_cache {
+        Ok(Json(response).into_response())
+    } else {
+        Ok((
+            [(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=1800"),
             )],
             Json(response),
         )
@@ -316,6 +562,199 @@ fn anagram_html() -> String {
 
 fn synonyms_html() -> String {
     render_page("Synonyms", SYNONYMS_BODY_HTML, SYNONYMS_SCRIPT)
+}
+
+fn parse_pos_filter(pos: Option<&str>) -> Result<Vec<Pos>, ApiError> {
+    if let Some(p) = pos {
+        let ch = p
+            .chars()
+            .next()
+            .ok_or_else(|| ApiError::bad_request("pos is invalid"))?;
+        let parsed = Pos::from_char(ch.to_ascii_lowercase())
+            .ok_or_else(|| ApiError::bad_request("pos must be one of n|v|a|r"))?;
+        Ok(vec![parsed])
+    } else {
+        Ok(vec![Pos::Noun, Pos::Verb, Pos::Adj, Pos::Adv])
+    }
+}
+
+fn pos_label(pos: Pos) -> &'static str {
+    match pos {
+        Pos::Noun => "noun",
+        Pos::Verb => "verb",
+        Pos::Adj => "adj",
+        Pos::Adv => "adv",
+    }
+}
+
+fn pos_order(pos: Pos) -> usize {
+    match pos {
+        Pos::Noun => 0,
+        Pos::Verb => 1,
+        Pos::Adj => 2,
+        Pos::Adv => 3,
+    }
+}
+
+fn synset_id_response(id: SynsetId) -> SynsetIdResponse {
+    SynsetIdResponse {
+        pos: id.pos.to_char(),
+        offset: id.offset,
+    }
+}
+
+fn best_sense_count_for_synset(
+    wn: &WordNet,
+    synset: &Synset<'_>,
+    candidate_lemmas: &[String],
+) -> Option<u32> {
+    let mut best = None;
+    for lemma in candidate_lemmas {
+        if let Some(count) = wn.sense_count(synset.id.pos, lemma, synset.id.offset) {
+            best = match best {
+                Some(existing) if existing >= count => Some(existing),
+                _ => Some(count),
+            };
+        }
+    }
+    best
+}
+
+fn best_sense_count_from_synset(wn: &WordNet, synset: &Synset<'_>) -> Option<u32> {
+    let mut best = None;
+    for lemma in &synset.words {
+        if let Some(count) = wn.sense_count(synset.id.pos, lemma.text, synset.id.offset) {
+            best = match best {
+                Some(existing) if existing >= count => Some(existing),
+                _ => Some(count),
+            };
+        }
+    }
+    best
+}
+
+fn relation_label(symbol: &str) -> (&'static str, &'static str) {
+    match symbol {
+        "!" => ("antonyms", "Antonyms"),
+        "@" | "@i" => ("hypernyms", "Hypernyms"),
+        "~" | "~i" => ("hyponyms", "Hyponyms"),
+        "&" => ("similar_to", "Similar to"),
+        "^" => ("also_see", "Also see"),
+        "+" => ("derivations", "Derivationally related"),
+        "=" => ("attributes", "Attributes"),
+        "<" => ("participle", "Participle of"),
+        "\\" => ("pertainyms", "Pertainyms"),
+        "*" => ("entails", "Entails"),
+        ">" => ("causes", "Causes"),
+        "$" => ("verb_group", "Verb group"),
+        "#m" => ("member_holonyms", "Member holonyms"),
+        "#s" => ("substance_holonyms", "Substance holonyms"),
+        "#p" => ("part_holonyms", "Part holonyms"),
+        "%m" => ("member_meronyms", "Member meronyms"),
+        "%s" => ("substance_meronyms", "Substance meronyms"),
+        "%p" => ("part_meronyms", "Part meronyms"),
+        ";c" => ("topic_domain", "Topic domain"),
+        "-c" => ("topic_members", "Topic members"),
+        ";r" => ("region_domain", "Region domain"),
+        "-r" => ("region_members", "Region members"),
+        ";u" => ("usage_domain", "Usage domain"),
+        "-u" => ("usage_members", "Usage members"),
+        _ => ("other", "Other"),
+    }
+}
+
+fn relation_order(kind: &str) -> usize {
+    let order: [&str; 23] = [
+        "hypernyms",
+        "hyponyms",
+        "similar_to",
+        "antonyms",
+        "derivations",
+        "also_see",
+        "entails",
+        "causes",
+        "verb_group",
+        "attributes",
+        "participle",
+        "pertainyms",
+        "member_meronyms",
+        "part_meronyms",
+        "substance_meronyms",
+        "member_holonyms",
+        "part_holonyms",
+        "substance_holonyms",
+        "topic_domain",
+        "topic_members",
+        "region_domain",
+        "region_members",
+        "usage_domain",
+    ];
+    order
+        .iter()
+        .position(|k| k == &kind)
+        .unwrap_or(order.len() + 1)
+}
+
+fn char_to_pos(c: char) -> Pos {
+    Pos::from_char(c).unwrap_or(Pos::Noun)
+}
+
+fn lemma_sort_key(lemmas: &[String]) -> String {
+    lemmas
+        .first()
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn collect_relations(wn: &WordNet, synset: &Synset<'_>) -> Vec<RelationGroup> {
+    let mut groups: HashMap<String, RelationGroup> = HashMap::new();
+    for ptr in &synset.pointers {
+        let (kind, label) = relation_label(ptr.symbol);
+        let Some(target_synset) = wn.get_synset(ptr.target) else {
+            continue;
+        };
+        let target = RelatedTarget {
+            pos: pos_label(target_synset.id.pos).to_string(),
+            synset_id: synset_id_response(target_synset.id),
+            lemmas: target_synset
+                .words
+                .iter()
+                .map(|w| w.text.to_string())
+                .collect(),
+            definition: target_synset.gloss.definition.to_string(),
+            sense_count: best_sense_count_from_synset(wn, &target_synset),
+        };
+        let entry = groups
+            .entry(kind.to_string())
+            .or_insert_with(|| RelationGroup {
+                kind: kind.to_string(),
+                label: label.to_string(),
+                symbol: ptr.symbol.to_string(),
+                targets: Vec::new(),
+            });
+        let exists = entry.targets.iter().any(|t| {
+            t.synset_id.pos == target.synset_id.pos && t.synset_id.offset == target.synset_id.offset
+        });
+        if !exists {
+            entry.targets.push(target);
+        }
+    }
+
+    let mut groups_vec: Vec<_> = groups.into_values().collect();
+    for group in &mut groups_vec {
+        group.targets.sort_by(|a, b| {
+            let sa = a.sense_count.unwrap_or(0);
+            let sb = b.sense_count.unwrap_or(0);
+            sb.cmp(&sa)
+                .then_with(|| lemma_sort_key(&a.lemmas).cmp(&lemma_sort_key(&b.lemmas)))
+        });
+    }
+    groups_vec.sort_by(|a, b| {
+        relation_order(&a.kind)
+            .cmp(&relation_order(&b.kind))
+            .then_with(|| a.label.cmp(&b.label))
+    });
+    groups_vec
 }
 
 impl IntoResponse for ApiError {

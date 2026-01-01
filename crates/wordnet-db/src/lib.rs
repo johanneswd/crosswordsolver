@@ -373,6 +373,20 @@ impl WordNet {
         self.sense_counts.len()
     }
 
+    /// Sense frequency for a given lemma/pos/synset, if present in `cntlist.rev`.
+    pub fn sense_count(&self, pos: Pos, lemma: &str, synset_offset: u32) -> Option<u32> {
+        let normalized = normalize_lemma(lemma);
+        let entry = self.index.get(&(pos, normalized.clone()))?;
+        let sense_number = entry
+            .synset_offsets
+            .iter()
+            .position(|off| *off == synset_offset)?;
+        let sense_number = sense_number as u32 + 1;
+        self.sense_counts
+            .get(&(normalized, pos, sense_number))
+            .copied()
+    }
+
     fn make_synset_view<'a>(&'a self, data: &'a SynsetData) -> Synset<'a> {
         let words = data
             .words

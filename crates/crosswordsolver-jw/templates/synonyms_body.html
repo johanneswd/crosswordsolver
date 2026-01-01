@@ -1,20 +1,29 @@
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="mb-3">
-          <label class="form-label fw-semibold" for="wordInput">Word</label>
-          <input id="wordInput" type="text" class="form-control form-control-lg" placeholder="Enter a word" autocomplete="off">
-          <div class="form-text">Powered by Datamuse for synonyms, related, and similar-meaning words.</div>
-        </div>
-        <div class="d-grid">
-          <button id="solveBtn" class="btn btn-primary btn-lg" type="button">Find synonyms</button>
+        <div class="row align-items-end">
+          <div class="col-md-8">
+            <label class="form-label fw-semibold" for="wordInput">Word</label>
+            <input id="wordInput" type="text" class="form-control form-control-lg" placeholder="Enter a word" autocomplete="off">
+            <div class="form-text">Powered by WordNet for definitions and related words.</div>
+          </div>
+          <div class="col-md-4 mt-3 mt-md-0 d-flex gap-2 justify-content-md-end">
+            <button id="solveBtn" class="btn btn-primary btn-lg flex-grow-1" type="button">Find words</button>
+            <button id="resetBtn" class="btn btn-outline-secondary btn-lg" type="button">Reset</button>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="mt-4">
-      <h2 class="h5">Results</h2>
-      <div id="status" class="text-muted mb-2">Enter a word to search.</div>
-      <div class="results">
-        <div id="resultsList" class="d-flex flex-column gap-3"></div>
+      <div id="status" class="text-muted mb-3">Enter a word to search.</div>
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <h2 class="h5">Dictionary</h2>
+          <div id="dictionaryList" class="d-flex flex-column gap-3"></div>
+        </div>
+        <div class="col-lg-7">
+          <h2 class="h5">Related words</h2>
+          <div id="relatedList" class="d-flex flex-column gap-3"></div>
+        </div>
       </div>
     </div>

@@ -270,6 +270,9 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "wordnet-db",
+ "wordnet-morphy",
+ "wordnet-types",
 ]
 
 [[package]]
