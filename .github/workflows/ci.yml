@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_HOME: ${{ github.workspace }}/.cargo
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
 
 jobs:
   fmt:
@@ -24,6 +25,8 @@ jobs:
             ${{ env.CARGO_HOME }}/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - run: cargo fetch --locked
       - run: cargo fmt --all -- --check
 
   clippy:
@@ -38,6 +41,9 @@ jobs:
             ${{ env.CARGO_HOME }}/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+          save-always: true
+      - run: cargo fetch --locked
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   test:
@@ -52,4 +58,7 @@ jobs:
             ${{ env.CARGO_HOME }}/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+          save-always: true
+      - run: cargo fetch --locked
       - run: cargo test --workspace --all-features --locked

@@ -4,10 +4,20 @@ const resetBtn = document.getElementById('resetBtn');
 const statusEl = document.getElementById('status');
 const dictionaryList = document.getElementById('dictionaryList');
 const relatedList = document.getElementById('relatedList');
+const simpleList = document.getElementById('simpleList');
+const simpleView = document.getElementById('simpleView');
+const advancedView = document.getElementById('advancedView');
+const simpleViewBtn = document.getElementById('simpleViewBtn');
+const advancedViewBtn = document.getElementById('advancedViewBtn');
+const dictionarySection = document.getElementById('dictionarySection');
+const relatedSection = document.getElementById('relatedSection');
+const relatedHeader = document.getElementById('relatedHeader');
 const definitionCache = new Map();
 let popoverEl = null;
 let popoverWord = '';
 let loading = false;
+let viewMode = 'advanced';
+let lastResult = null;
 
 function escapeHtml(str) {
   if (str == null) return '';
@@ -23,6 +33,26 @@ function escapeHtml(str) {
 
 function prettyLemma(lemma) {
   return (lemma || '').replace(/_/g, ' ');
+}
+
+function getStoredViewMode() {
+  try {
+    const stored = localStorage.getItem('synonymsViewMode');
+    if (stored === 'simple' || stored === 'advanced') {
+      return stored;
+    }
+  } catch (_) {
+    /* ignored */
+  }
+  return 'advanced';
+}
+
+function storeViewMode(mode) {
+  try {
+    localStorage.setItem('synonymsViewMode', mode);
+  } catch (_) {
+    /* ignored */
+  }
 }
 
 function ensurePopover() {
@@ -55,6 +85,43 @@ function positionPopover(target) {
   pop.style.top = `${top}px`;
   pop.style.left = `${left}px`;
   pop.style.visibility = 'visible';
+}
+
+function applyViewMode() {
+  if (viewMode === 'simple') {
+    simpleView.classList.remove('d-none');
+    advancedView.classList.add('d-none');
+    dictionarySection.classList.add('d-none');
+    relatedHeader.classList.add('d-none');
+    relatedSection.classList.remove('col-lg-7');
+    relatedSection.classList.add('col-12');
+    simpleViewBtn.classList.add('active');
+    advancedViewBtn.classList.remove('active');
+    simpleViewBtn.setAttribute('aria-pressed', 'true');
+    advancedViewBtn.setAttribute('aria-pressed', 'false');
+    if (lastResult) {
+      renderSimpleView(lastResult.synsets || [], lastResult.normalized || '');
+    }
+  } else {
+    simpleView.classList.add('d-none');
+    advancedView.classList.remove('d-none');
+    dictionarySection.classList.remove('d-none');
+    relatedHeader.classList.remove('d-none');
+    relatedSection.classList.remove('col-12');
+    relatedSection.classList.add('col-lg-7');
+    advancedViewBtn.classList.add('active');
+    simpleViewBtn.classList.remove('active');
+    simpleViewBtn.setAttribute('aria-pressed', 'false');
+    advancedViewBtn.setAttribute('aria-pressed', 'true');
+  }
+  hidePopover();
+}
+
+function setViewMode(mode) {
+  if (mode !== 'simple' && mode !== 'advanced') return;
+  viewMode = mode;
+  storeViewMode(mode);
+  applyViewMode();
 }
 
 function renderDefinitions(word, data) {
@@ -136,6 +203,8 @@ function handleResultKeydown(e) {
 function clearResults() {
   dictionaryList.innerHTML = '';
   relatedList.innerHTML = '';
+  simpleList.innerHTML = '';
+  lastResult = null;
   hidePopover();
 }
 
@@ -247,6 +316,92 @@ function aggregateRelations(synsets) {
   return groups;
 }
 
+function collectWordsForSynset(synset, normalizedWord) {
+  const words = new Map();
+  const normalized = (normalizedWord || '').toLowerCase();
+  const addWord = (lemma, kind) => {
+    if (!lemma) return;
+    const text = prettyLemma(lemma).trim();
+    if (!text) return;
+    const key = text.toLowerCase();
+    if (key === normalized) return;
+    if (!words.has(key)) {
+      words.set(key, { word: text, antonym: kind === 'antonyms' });
+    } else if (kind === 'antonyms') {
+      const entry = words.get(key);
+      entry.antonym = true;
+      words.set(key, entry);
+    }
+  };
+
+  (synset.lemmas || []).forEach(lemma => addWord(lemma, 'lemma'));
+  (synset.relations || []).forEach(group => {
+    (group.targets || []).forEach(target => {
+      (target.lemmas || []).forEach(lemma => addWord(lemma, group.kind || 'other'));
+    });
+  });
+
+  return Array.from(words.values()).sort((a, b) => a.word.localeCompare(b.word));
+}
+
+function renderSimpleView(synsets, normalizedWord) {
+  simpleList.innerHTML = '';
+  if (!synsets || !synsets.length) {
+    simpleList.innerHTML = '<div class="text-muted">No related words found.</div>';
+    return;
+  }
+
+  synsets.forEach(synset => {
+    const card = document.createElement('div');
+    card.className = 'card shadow-sm';
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const header = document.createElement('div');
+    header.className = 'd-flex align-items-start justify-content-between gap-3 mb-2';
+    const def = document.createElement('div');
+    def.className = 'fw-semibold';
+    def.textContent = synset.definition || 'No definition available.';
+    const pos = document.createElement('span');
+    pos.className = 'badge text-bg-light text-dark';
+    pos.textContent = synset.pos || '';
+    header.appendChild(def);
+    header.appendChild(pos);
+    body.appendChild(header);
+
+    const words = collectWordsForSynset(synset, normalizedWord);
+    if (!words.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted mt-2';
+      empty.textContent = 'No related words for this meaning.';
+      body.appendChild(empty);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'row row-cols-1 row-cols-sm-2 g-2 mt-2';
+      words.forEach(entry => {
+        const col = document.createElement('div');
+        col.className = 'col';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-secondary word-chip w-100 text-start';
+        if (entry.antonym) {
+          btn.classList.add('antonym', 'btn-outline-danger');
+        }
+        btn.dataset.word = entry.word;
+        btn.setAttribute('role', 'button');
+        btn.tabIndex = 0;
+        btn.textContent = entry.word;
+        col.appendChild(btn);
+        grid.appendChild(col);
+      });
+      body.appendChild(grid);
+    }
+
+    card.appendChild(body);
+    simpleList.appendChild(card);
+  });
+}
+
 function renderRelations(groups) {
   relatedList.innerHTML = '';
   if (!groups || !groups.length) {
@@ -333,15 +488,19 @@ async function runSearch() {
       throw new Error(text || 'Failed to fetch related words.');
     }
     const data = await resp.json();
+    lastResult = data;
     renderDictionary(data.synsets || []);
     const groups = aggregateRelations(data.synsets || []);
     renderRelations(groups);
+    renderSimpleView(data.synsets || [], data.normalized || word);
+    applyViewMode();
     if (data.note) {
       statusEl.textContent = data.note;
     } else {
       statusEl.textContent = 'Click any word to see definitions.';
     }
   } catch (err) {
+    lastResult = null;
     statusEl.classList.remove('text-muted');
     statusEl.classList.add('text-danger');
     const message = err.message || 'Error fetching suggestions.';
@@ -366,23 +525,29 @@ solveBtn.addEventListener('click', runSearch);
 resetBtn.addEventListener('click', resetAll);
 dictionaryList.addEventListener('click', handleResultClick);
 relatedList.addEventListener('click', handleResultClick);
+simpleList.addEventListener('click', handleResultClick);
 dictionaryList.addEventListener('keydown', handleResultKeydown);
 relatedList.addEventListener('keydown', handleResultKeydown);
+simpleList.addEventListener('keydown', handleResultKeydown);
 wordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
     runSearch();
   }
 });
+simpleViewBtn.addEventListener('click', () => setViewMode('simple'));
+advancedViewBtn.addEventListener('click', () => setViewMode('advanced'));
 
 document.addEventListener('click', (e) => {
   if (!popoverEl || popoverEl.style.display !== 'block') return;
   if (popoverEl.contains(e.target)) return;
-  if (relatedList.contains(e.target) || dictionaryList.contains(e.target)) return;
+  if (relatedList.contains(e.target) || dictionaryList.contains(e.target) || simpleList.contains(e.target)) return;
   hidePopover();
 });
 
 window.addEventListener('scroll', () => hidePopover(), true);
 window.addEventListener('resize', () => hidePopover());
 
+viewMode = getStoredViewMode();
+applyViewMode();
 statusEl.textContent = 'Enter a word to search.';

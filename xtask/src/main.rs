@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use cargo_metadata::{Dependency, Metadata, MetadataCommand, Package, PackageId};
+use cargo_metadata::{Dependency, DependencyKind, Metadata, MetadataCommand, Package, PackageId};
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
 use toml_edit::{DocumentMut, Item, Value, value};
@@ -212,6 +212,17 @@ fn is_publishable(pkg: &Package) -> bool {
     }
 }
 
+fn dependency_target_name(dep: &Dependency) -> &str {
+    dep.package.as_deref().unwrap_or(dep.name.as_str())
+}
+
+fn is_publish_dependency(dep: &Dependency) -> bool {
+    matches!(
+        dep.kind,
+        None | Some(DependencyKind::Normal | DependencyKind::Build)
+    )
+}
+
 fn topological_sort(packages: &[PublishablePackage]) -> Result<Vec<PublishablePackage>> {
     let mut package_map: HashMap<&PackageId, &PublishablePackage> =
         packages.iter().map(|p| (&p.id, p)).collect();
@@ -228,7 +239,12 @@ fn topological_sort(packages: &[PublishablePackage]) -> Result<Vec<PublishablePa
     for pkg in packages {
         let mut seen = HashSet::new();
         for dep in &pkg.dependencies {
-            if let Some(&dep_id) = name_to_id.get(dep.name.as_str())
+            if !is_publish_dependency(dep) {
+                continue;
+            }
+
+            let target = dependency_target_name(dep);
+            if let Some(&dep_id) = name_to_id.get(target)
                 && publishable_ids.contains(dep_id)
                 && seen.insert(dep_id)
             {
@@ -416,22 +432,33 @@ fn update_path_dependency_versions(metadata: &Metadata, new_version: &str) -> Re
         for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
             if let Some(table) = doc.get_mut(section).and_then(Item::as_table_like_mut) {
                 for (dep_name, item) in table.iter_mut() {
-                    if !workspace_names.contains(dep_name.get()) {
-                        continue;
-                    }
-
                     match item {
                         Item::Table(dep_table) => {
-                            if dep_table.get("path").is_some() {
+                            if dep_table.get("path").is_none() {
+                                continue;
+                            }
+                            let pkg_name = dep_table
+                                .get("package")
+                                .and_then(Item::as_value)
+                                .and_then(Value::as_str)
+                                .unwrap_or(dep_name.get());
+                            if workspace_names.contains(pkg_name) {
                                 dep_table.insert("version", value(new_version));
                             }
                         }
                         Item::Value(val) => {
-                            if let Some(inline) = val.as_inline_table_mut()
-                                && inline.get("path").is_some()
-                            {
-                                inline.insert("version", Value::from(new_version));
-                                inline.fmt();
+                            if let Some(inline) = val.as_inline_table_mut() {
+                                if inline.get("path").is_none() {
+                                    continue;
+                                }
+                                let pkg_name = inline
+                                    .get("package")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or(dep_name.get());
+                                if workspace_names.contains(pkg_name) {
+                                    inline.insert("version", Value::from(new_version));
+                                    inline.fmt();
+                                }
                             }
                         }
                         _ => {}
@@ -462,18 +489,19 @@ fn check_internal_dependency_versions(metadata: &Metadata) -> Result<()> {
             continue;
         }
         for dep in &pkg.dependencies {
-            if let Some(dep_version) = workspace_versions.get(&dep.name) {
+            let target = dependency_target_name(dep);
+            if let Some(dep_version) = workspace_versions.get(target) {
                 let req = &dep.req;
                 let expected_req = VersionReq::parse(&dep_version.to_string())?;
                 if req == &VersionReq::STAR {
                     errors.push(format!(
                         "{}: dependency on {} must specify a version (found wildcard)",
-                        pkg.name, dep.name
+                        pkg.name, target
                     ));
                 } else if req != &expected_req {
                     errors.push(format!(
                         "{}: dependency on {} has version requirement {} but expected {}",
-                        pkg.name, dep.name, req, expected_req
+                        pkg.name, target, req, expected_req
                     ));
                 }
             }
@@ -510,21 +538,33 @@ fn set_path_deps_to_local(metadata: &Metadata) -> Result<()> {
         for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
             if let Some(table) = doc.get_mut(section).and_then(Item::as_table_like_mut) {
                 for (dep_name, item) in table.iter_mut() {
-                    if !workspace_names.contains(dep_name.get()) {
-                        continue;
-                    }
                     match item {
                         Item::Table(dep_table) => {
-                            if dep_table.get("path").is_some() {
+                            if dep_table.get("path").is_none() {
+                                continue;
+                            }
+                            let pkg_name = dep_table
+                                .get("package")
+                                .and_then(Item::as_value)
+                                .and_then(Value::as_str)
+                                .unwrap_or(dep_name.get());
+                            if workspace_names.contains(pkg_name) {
                                 dep_table.remove("version");
                             }
                         }
                         Item::Value(val) => {
-                            if let Some(inline) = val.as_inline_table_mut()
-                                && inline.get("path").is_some()
-                            {
-                                inline.remove("version");
-                                inline.fmt();
+                            if let Some(inline) = val.as_inline_table_mut() {
+                                if inline.get("path").is_none() {
+                                    continue;
+                                }
+                                let pkg_name = inline
+                                    .get("package")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or(dep_name.get());
+                                if workspace_names.contains(pkg_name) {
+                                    inline.remove("version");
+                                    inline.fmt();
+                                }
                             }
                         }
                         _ => {}
