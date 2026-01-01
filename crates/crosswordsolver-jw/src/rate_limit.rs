@@ -78,8 +78,8 @@ where
     }
 
     fn call(&mut self, req: axum::http::Request<ReqBody>) -> Self::Future {
-        if let Some(client_id) = client_id(&req) {
-            if !self.check_and_consume(&client_id) {
+        if let Some(client_id) = client_id(&req)
+            && !self.check_and_consume(&client_id) {
                 self.state
                     .dropped_since_log
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -91,10 +91,9 @@ where
                         .unwrap())
                 });
             }
-        }
 
         let fut = self.inner.call(req);
-        Box::pin(async move { fut.await })
+        Box::pin(fut)
     }
 }
 

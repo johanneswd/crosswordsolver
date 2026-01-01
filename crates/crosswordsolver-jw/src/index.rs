@@ -222,16 +222,14 @@ impl WordIndex {
         let mut items = Vec::with_capacity(params.page_size);
 
         for idx in candidates.iter_ones() {
-            if let Some(counts) = len_index.letter_counts.get(idx) {
-                if *counts == params.bag_counts {
+            if let Some(counts) = len_index.letter_counts.get(idx)
+                && *counts == params.bag_counts {
                     total += 1;
-                    if total > offset && items.len() < params.page_size {
-                        if let Some(word) = len_index.words.get(idx) {
+                    if total > offset && items.len() < params.page_size
+                        && let Some(word) = len_index.words.get(idx) {
                             items.push(word.clone());
                         }
-                    }
                 }
-            }
         }
 
         let has_more = offset + items.len() < total;
