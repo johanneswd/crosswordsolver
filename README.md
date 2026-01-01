@@ -42,9 +42,10 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 - `RATE_LIMIT_RPS` (default 5) and `RATE_LIMIT_BURST` (default 10) control the per-IP rate limiter (only applied when `Fly-Client-IP` header is present)
 
 ## CI/CD
-- GitHub Actions (`.github/workflows/ci.yml`) runs fmt, clippy, tests, and `xtask check-versions` on pushes/PRs to keep crates publishable.
-- Tag pushes `vX.Y.Z` trigger release workflow (`.github/workflows/release.yml`) running fmt/clippy/test, `xtask check-tag`, then `xtask publish` (needs `CARGO_REGISTRY_TOKEN` secret).
-- CI caches Cargo registry/git and `target` using a job-local `CARGO_HOME`.
+- Build (`.github/workflows/build.yml`): runs fmt, clippy, and tests on pull requests and on pushes (including `v*` tags). Caches Cargo registry/git and `target` plus the downloaded WordNet assets.
+- Release Cargo (`.github/workflows/release_cargo.yml`): triggered only after a successful Build run on a `v*` tag push. Re-checks the tag via `xtask check-tag` and publishes crates with `xtask publish` (requires `CARGO_REGISTRY_TOKEN`).
+- Release Fly App (`.github/workflows/release_fly_app.yml`): triggered after a successful Build run on `main`. Deploys to Fly.io using `fly.toml` (requires `FLY_API_TOKEN`).
+- Secrets to configure: `CARGO_REGISTRY_TOKEN` for publishing crates to crates.io and `FLY_API_TOKEN` for Fly.io deploys.
 
 ## Helper scripts
 - `scripts/build_wordlist.py`: regenerate a normalized `words.txt` from source lists.
