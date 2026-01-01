@@ -10,7 +10,7 @@ documentation = "https://docs.rs/wordnet-morphy"
 
 [dependencies]
 anyhow = "1"
-wordnet-types = { path = "../wordnet-types" }
+wordnet-types = { path = "../wordnet-types", version = "0.1.2" }
 
 [dev-dependencies]
-wordnet-db = { path = "../wordnet-db" }
+wordnet-db = { path = "../wordnet-db", version = "0.1.2" }

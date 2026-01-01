@@ -35,13 +35,20 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 - `RATE_LIMIT_RPS` (default 5) and `RATE_LIMIT_BURST` (default 10) control the per-IP rate limiter (only applied when `Fly-Client-IP` header is present)
 
 ## CI/CD
-- GitHub Actions runs fmt, clippy, and tests on pushes/PRs.
-- Tags matching `vX.Y.Z` trigger `xtask check-tag` and `xtask publish` to release publishable crates to crates.io (requires `CARGO_REGISTRY_TOKEN` secret).
+- GitHub Actions (`.github/workflows/ci.yml`) runs fmt, clippy, tests, and `xtask check-versions` on pushes/PRs to keep crates publishable.
+- Tag pushes `vX.Y.Z` trigger release workflow (`.github/workflows/release.yml`) running fmt/clippy/test, `xtask check-tag`, then `xtask publish` (needs `CARGO_REGISTRY_TOKEN` secret).
 - CI caches Cargo registry/git and `target` using a job-local `CARGO_HOME`.
 
 ## Helper scripts
 - `scripts/build_wordlist.py`: regenerate a normalized `words.txt` from source lists.
 - `download_wordnet.py`: download/extract Open English WordNet data for local testing.
+
+## xtask helpers
+- `cargo run -p xtask -- bump-version --version vX.Y.Z`: bump workspace version, sync path-dependency versions, and refresh `Cargo.lock`.
+- `cargo run -p xtask -- check-versions`: verify workspace crate versions match and internal deps use explicit matching versions.
+- `cargo run -p xtask -- check-tag --tag vX.Y.Z`: ensure tag matches workspace version and publishable crates are aligned.
+- `cargo run -p xtask -- publish --tag vX.Y.Z [--dry-run]`: publish crates in dependency order.
+- `cargo run -p xtask -- use-path-deps`: switch workspace internal deps to path-only for local development and update `Cargo.lock`.
 
 ## Build container
 ```bash
