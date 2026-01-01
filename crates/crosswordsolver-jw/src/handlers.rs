@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::extract::State;
 use axum::http::{HeaderValue, StatusCode, header};
@@ -570,6 +570,7 @@ fn render_page(
     let base = BASE_HTML
         .replace("{{title}}", title)
         .replace("{{meta_description}}", meta_description)
+        .replace("{{google_site_verification}}", &site_verification_meta())
         .replace("{{style}}", STYLE_HTML)
         .replace("{{header}}", &header)
         .replace("{{body}}", body)
@@ -616,6 +617,20 @@ fn about_html() -> String {
         ABOUT_BODY_HTML,
         ABOUT_SCRIPT,
     )
+}
+
+fn site_verification_meta() -> String {
+    static TOKEN: OnceLock<Option<String>> = OnceLock::new();
+    let token = TOKEN.get_or_init(|| std::env::var("GOOGLE_SITE_VERIFICATION").ok());
+    token
+        .as_ref()
+        .map(|val| {
+            format!(
+                r#"<meta name="google-site-verification" content="{}">"#,
+                val
+            )
+        })
+        .unwrap_or_default()
 }
 
 fn parse_pos_filter(pos: Option<&str>) -> Result<Vec<Pos>, ApiError> {
