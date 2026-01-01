@@ -79,18 +79,19 @@ where
 
     fn call(&mut self, req: axum::http::Request<ReqBody>) -> Self::Future {
         if let Some(client_id) = client_id(&req)
-            && !self.check_and_consume(&client_id) {
-                self.state
-                    .dropped_since_log
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                log_drops_if_needed(&self.state);
-                return Box::pin(async move {
-                    Ok(axum::http::Response::builder()
-                        .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
-                        .body(axum::body::Body::from("rate limited"))
-                        .unwrap())
-                });
-            }
+            && !self.check_and_consume(&client_id)
+        {
+            self.state
+                .dropped_since_log
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            log_drops_if_needed(&self.state);
+            return Box::pin(async move {
+                Ok(axum::http::Response::builder()
+                    .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
+                    .body(axum::body::Body::from("rate limited"))
+                    .unwrap())
+            });
+        }
 
         let fut = self.inner.call(req);
         Box::pin(fut)

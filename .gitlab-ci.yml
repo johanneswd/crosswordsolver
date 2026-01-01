@@ -1,30 +1,52 @@
 image: rust:1.92
 
 stages:
-  - test
-  - audit
+  - checks
+  - release
 
 variables:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
+    - .cargo/registry
+    - .cargo/git
     - target
-    - /usr/local/cargo/registry
-    - /usr/local/cargo/git
-    - /usr/local/cargo/bin
+
+fmt:
+  stage: checks
+  script:
+    - cargo fmt --all -- --check
+
+clippy:
+  stage: checks
+  script:
+    - cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 test:
-  stage: test
+  stage: checks
   script:
-    - cargo fetch --locked
-    - cargo test --workspace --all-targets --locked
+    - cargo test --workspace --all-features --locked
 
-cargo_audit:
-  stage: audit
-  needs: ["test"]
+check_tag:
+  stage: release
+  needs: ["fmt", "clippy", "test"]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z\\.-]+)?$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$CI_COMMIT_TAG =~ /^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z\\.-]+)?$/'
+    - when: never
   script:
-    - cargo install --locked cargo-audit
-    - cargo audit
+    - cargo run -p xtask -- check-tag --tag "$CI_COMMIT_TAG"
+
+publish:
+  stage: release
+  needs: ["fmt", "clippy", "test", "check_tag"]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z\\.-]+)?$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$CI_COMMIT_TAG =~ /^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z\\.-]+)?$/'
+    - when: never
+  script:
+    - cargo run -p xtask -- publish --tag "$CI_COMMIT_TAG"

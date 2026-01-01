@@ -223,13 +223,16 @@ impl WordIndex {
 
         for idx in candidates.iter_ones() {
             if let Some(counts) = len_index.letter_counts.get(idx)
-                && *counts == params.bag_counts {
-                    total += 1;
-                    if total > offset && items.len() < params.page_size
-                        && let Some(word) = len_index.words.get(idx) {
-                            items.push(word.clone());
-                        }
+                && *counts == params.bag_counts
+            {
+                total += 1;
+                if total > offset
+                    && items.len() < params.page_size
+                    && let Some(word) = len_index.words.get(idx)
+                {
+                    items.push(word.clone());
                 }
+            }
         }
 
         let has_more = offset + items.len() < total;

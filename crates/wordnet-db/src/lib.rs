@@ -688,15 +688,16 @@ fn parse_gloss(file: FileKind, root: &[u8], gloss: &str) -> Result<GlossData> {
             '"' => {
                 if in_quote {
                     if let Some(start) = quote_start.take()
-                        && idx > start + 1 {
-                            let start_bytes =
-                                trimmed.as_ptr() as usize + start + 1 - root.as_ptr() as usize;
-                            examples.push(TextRef {
-                                file,
-                                start: start_bytes,
-                                len: idx - start - 1,
-                            });
-                        }
+                        && idx > start + 1
+                    {
+                        let start_bytes =
+                            trimmed.as_ptr() as usize + start + 1 - root.as_ptr() as usize;
+                        examples.push(TextRef {
+                            file,
+                            start: start_bytes,
+                            len: idx - start - 1,
+                        });
+                    }
                 } else {
                     quote_start = Some(idx);
                 }

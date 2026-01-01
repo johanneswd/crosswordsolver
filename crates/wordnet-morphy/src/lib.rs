@@ -114,39 +114,41 @@ impl Morphy {
 
         // Exceptions: may include multiple lemmas per surface form.
         if let Some(exc_map) = self.exceptions.get(&pos)
-            && let Some(entries) = exc_map.get(&norm_surface) {
-                for lemma in entries {
-                    if lemma_exists(pos, lemma) {
-                        push_unique(
-                            &mut out,
-                            &mut seen,
-                            LemmaCandidate {
-                                pos,
-                                lemma: Cow::Borrowed(lemma.as_str()),
-                                source: CandidateSource::Exception,
-                            },
-                        );
-                    }
-                }
-            }
-
-        // Rule-based guesses.
-        for (suffix, replacement) in rules_for(pos) {
-            if let Some(candidate) = apply_rule(&norm_surface, suffix, replacement)
-                && lemma_exists(pos, &candidate) {
+            && let Some(entries) = exc_map.get(&norm_surface)
+        {
+            for lemma in entries {
+                if lemma_exists(pos, lemma) {
                     push_unique(
                         &mut out,
                         &mut seen,
                         LemmaCandidate {
                             pos,
-                            lemma: Cow::Owned(candidate),
-                            source: CandidateSource::Rule {
-                                suffix,
-                                replacement,
-                            },
+                            lemma: Cow::Borrowed(lemma.as_str()),
+                            source: CandidateSource::Exception,
                         },
                     );
                 }
+            }
+        }
+
+        // Rule-based guesses.
+        for (suffix, replacement) in rules_for(pos) {
+            if let Some(candidate) = apply_rule(&norm_surface, suffix, replacement)
+                && lemma_exists(pos, &candidate)
+            {
+                push_unique(
+                    &mut out,
+                    &mut seen,
+                    LemmaCandidate {
+                        pos,
+                        lemma: Cow::Owned(candidate),
+                        source: CandidateSource::Rule {
+                            suffix,
+                            replacement,
+                        },
+                    },
+                );
+            }
         }
 
         out
@@ -205,9 +207,10 @@ fn apply_rule(surface: &str, suffix: &str, replacement: &str) -> Option<String> 
             let prev = chars.next_back();
             let last = chars.next_back();
             if let (Some(a), Some(b)) = (prev, last)
-                && a == b {
-                    candidate.pop();
-                }
+                && a == b
+            {
+                candidate.pop();
+            }
         }
 
         candidate

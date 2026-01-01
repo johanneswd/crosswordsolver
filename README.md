@@ -4,6 +4,13 @@ A Rust web service (Axum + Tokio) that loads a wordlist into an in-memory bitset
 
 Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadthewordlist.com/) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
+## Workspace crates
+- `crosswordsolver-jw`: Axum HTTP service + UI (binary only, not published).
+- `wordnet-types`: Basic shared types for WordNet data.
+- `wordnet-db`: Memory-mapped access to a prepared WordNet database file.
+- `wordnet-morphy`: WordNet morphology helpers and tests.
+- `xtask`: Internal tooling for tag checks/publishing (runs via `cargo run -p xtask ...`).
+
 ## Running locally
 1) Prereqs: Rust toolchain (`rustup`), and a word list file (default `words.txt` in the repo).
 2) Install deps and run tests:
@@ -26,6 +33,15 @@ Word list attribution: sourced from [SpreadTheWordlist.com](https://www.spreadth
 - `RUST_LOG` (set log level, e.g., `debug`)
 - CLI flag: `--no-cache` disables cache-control headers (useful during local dev or when proxies get in the way)
 - `RATE_LIMIT_RPS` (default 5) and `RATE_LIMIT_BURST` (default 10) control the per-IP rate limiter (only applied when `Fly-Client-IP` header is present)
+
+## CI/CD
+- GitLab CI runs fmt, clippy, and tests on branches/MRs.
+- Tags matching `vX.Y.Z` trigger `xtask check-tag` and `xtask publish` to release publishable crates to crates.io (requires `CARGO_REGISTRY_TOKEN`).
+- CI caches Cargo registry/git and `target` using a project-local `CARGO_HOME`.
+
+## Helper scripts
+- `scripts/build_wordlist.py`: regenerate a normalized `words.txt` from source lists.
+- `download_wordnet.py`: download/extract Open English WordNet data for local testing.
 
 ## Build container
 ```bash
