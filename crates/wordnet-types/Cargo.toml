@@ -2,5 +2,10 @@
 name = "wordnet-types"
 version.workspace = true
 edition = "2024"
+description = "Shared types and part-of-speech enums for WordNet data."
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/wordnet-types"
 
 [dependencies]

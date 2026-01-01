@@ -2,6 +2,11 @@
 name = "wordnet-morphy"
 version.workspace = true
 edition = "2024"
+description = "WordNet morphology rules and lookup helpers for lemmas and inflections."
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/wordnet-morphy"
 
 [dependencies]
 anyhow = "1"

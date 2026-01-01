@@ -3,6 +3,10 @@ name = "crosswordsolver-jw"
 version.workspace = true
 edition = "2024"
 publish = false
+description = "Axum-based crossword solver HTTP service with pattern search UI and API."
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "crosswordsolver"

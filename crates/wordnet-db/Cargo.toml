@@ -2,6 +2,11 @@
 name = "wordnet-db"
 version.workspace = true
 edition = "2024"
+description = "Memory-mapped reader for prebuilt WordNet database files."
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/wordnet-db"
 
 [dependencies]
 anyhow = "1"
