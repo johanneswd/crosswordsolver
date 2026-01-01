@@ -73,3 +73,11 @@ jobs:
       - run: python3 download_wordnet.py
       - run: cargo fetch --locked
       - run: cargo test --workspace --all-features --locked
+
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build --file Dockerfile --tag crosswordsolver-ci .
