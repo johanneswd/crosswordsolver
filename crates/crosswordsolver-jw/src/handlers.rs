@@ -6,8 +6,8 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use serde_json::json;
+use thiserror::Error;
 
 use crate::index::{
     AnagramParams, MAX_WORD_LEN, QueryParams, WordIndex, parse_letter_bag, parse_letters,
@@ -302,10 +302,7 @@ fn render_page(title: &str, body: &str, script: &str) -> String {
         .replace("{{header}}", &header)
         .replace("{{body}}", body)
         .replace("{{footer}}", FOOTER_HTML)
-        .replace(
-            "{{scripts}}",
-            &format!(r#"<script>{}</script>"#, script),
-        );
+        .replace("{{scripts}}", &format!(r#"<script>{}</script>"#, script));
     base.replace("__MAX_LEN__", &MAX_WORD_LEN.to_string())
 }
 

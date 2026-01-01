@@ -73,11 +73,13 @@ async fn matches_endpoint_rejects_invalid_params() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or_default()
-        .to_lowercase()
-        .contains("page"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("page")
+    );
 }
 
 #[tokio::test]
@@ -96,11 +98,13 @@ async fn matches_endpoint_rejects_invalid_pattern() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or_default()
-        .to_lowercase()
-        .contains("invalid"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("invalid")
+    );
 }
 
 #[tokio::test]
@@ -119,11 +123,13 @@ async fn anagrams_endpoint_rejects_missing_letters() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or_default()
-        .to_lowercase()
-        .contains("required"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("required")
+    );
 }
 
 #[tokio::test]
@@ -142,11 +148,13 @@ async fn anagrams_endpoint_rejects_length_mismatch() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or_default()
-        .to_lowercase()
-        .contains("pattern length"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("pattern length")
+    );
 }
 
 #[tokio::test]
@@ -165,9 +173,11 @@ async fn anagrams_endpoint_rejects_impossible_pattern() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or_default()
-        .to_lowercase()
-        .contains("pattern requires"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("pattern requires")
+    );
 }

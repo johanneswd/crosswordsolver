@@ -1,0 +1,2 @@
+00002500 02 v 02 run 00 jog 01 01 @ 00003000 v 0000 02 + 01 01 + 02 00 | move fast; go swiftly "run quickly"
+00003000 02 v 01 move 00 00 0 | change location "move away"

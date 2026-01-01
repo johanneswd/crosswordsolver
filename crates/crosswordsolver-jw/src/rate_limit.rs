@@ -108,15 +108,20 @@ fn client_id<B>(req: &axum::http::Request<B>) -> Option<String> {
 
 impl<S> RateLimiter<S> {
     fn check_and_consume(&self, client: &str) -> bool {
-        let mut entry = self.state.buckets.entry(client.to_string()).or_insert(Bucket {
-            tokens: self.burst,
-            last_refill: Instant::now(),
-        });
+        let mut entry = self
+            .state
+            .buckets
+            .entry(client.to_string())
+            .or_insert(Bucket {
+                tokens: self.burst,
+                last_refill: Instant::now(),
+            });
         let now = Instant::now();
-        let elapsed = now.saturating_duration_since(entry.last_refill).as_secs_f64();
+        let elapsed = now
+            .saturating_duration_since(entry.last_refill)
+            .as_secs_f64();
         if elapsed > 0.0 {
-            entry.tokens =
-                (entry.tokens + elapsed * self.rate_per_sec).min(self.burst);
+            entry.tokens = (entry.tokens + elapsed * self.rate_per_sec).min(self.burst);
             entry.last_refill = now;
         }
         if entry.tokens >= 1.0 {

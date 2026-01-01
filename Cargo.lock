@@ -396,6 +396,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
+name = "memmap2"
+version = "0.9.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -989,6 +998,28 @@ name = "wit-bindgen"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
+
+[[package]]
+name = "wordnet-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "memmap2",
+ "wordnet-types",
+]
+
+[[package]]
+name = "wordnet-morphy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "wordnet-db",
+ "wordnet-types",
+]
+
+[[package]]
+name = "wordnet-types"
+version = "0.1.0"
 
 [[package]]
 name = "wyz"

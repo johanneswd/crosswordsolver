@@ -45,8 +45,7 @@ async fn main() -> anyhow::Result<()> {
         disable_cache: config.disable_cache,
     };
 
-    let rate_limiter =
-        RateLimiterLayer::new(config.rate_limit_rps, config.rate_limit_burst);
+    let rate_limiter = RateLimiterLayer::new(config.rate_limit_rps, config.rate_limit_burst);
     let app = router(state)
         .layer(rate_limiter)
         .layer(TraceLayer::new_for_http());

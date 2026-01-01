@@ -1,0 +1,9 @@
+[package]
+name = "wordnet-db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+memmap2 = "0.9"
+wordnet-types = { path = "../wordnet-types" }
