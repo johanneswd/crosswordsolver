@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use cargo_metadata::{Dependency, Metadata, MetadataCommand, Package, PackageId};
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
-use toml_edit::{value, DocumentMut, Item, Value};
+use toml_edit::{DocumentMut, Item, Value, value};
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -427,11 +427,11 @@ fn update_path_dependency_versions(metadata: &Metadata, new_version: &str) -> Re
                             }
                         }
                         Item::Value(val) => {
-                            if let Some(inline) = val.as_inline_table_mut() {
-                                if inline.get("path").is_some() {
-                                    inline.insert("version", Value::from(new_version));
-                                    inline.fmt();
-                                }
+                            if let Some(inline) = val.as_inline_table_mut()
+                                && inline.get("path").is_some()
+                            {
+                                inline.insert("version", Value::from(new_version));
+                                inline.fmt();
                             }
                         }
                         _ => {}
@@ -520,11 +520,11 @@ fn set_path_deps_to_local(metadata: &Metadata) -> Result<()> {
                             }
                         }
                         Item::Value(val) => {
-                            if let Some(inline) = val.as_inline_table_mut() {
-                                if inline.get("path").is_some() {
-                                    inline.remove("version");
-                                    inline.fmt();
-                                }
+                            if let Some(inline) = val.as_inline_table_mut()
+                                && inline.get("path").is_some()
+                            {
+                                inline.remove("version");
+                                inline.fmt();
                             }
                         }
                         _ => {}
