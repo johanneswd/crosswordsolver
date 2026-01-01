@@ -210,10 +210,12 @@ fn topological_sort(packages: &[PublishablePackage]) -> Result<Vec<PublishablePa
         let mut seen = HashSet::new();
         for dep in &pkg.dependencies {
             if let Some(&dep_id) = name_to_id.get(dep.name.as_str())
-                && publishable_ids.contains(dep_id) && seen.insert(dep_id) {
-                    adj.entry(dep_id).or_default().push(&pkg.id);
-                    *indegree.entry(&pkg.id).or_default() += 1;
-                }
+                && publishable_ids.contains(dep_id)
+                && seen.insert(dep_id)
+            {
+                adj.entry(dep_id).or_default().push(&pkg.id);
+                *indegree.entry(&pkg.id).or_default() += 1;
+            }
         }
     }
 
