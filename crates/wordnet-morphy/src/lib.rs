@@ -113,8 +113,8 @@ impl Morphy {
         }
 
         // Exceptions: may include multiple lemmas per surface form.
-        if let Some(exc_map) = self.exceptions.get(&pos) {
-            if let Some(entries) = exc_map.get(&norm_surface) {
+        if let Some(exc_map) = self.exceptions.get(&pos)
+            && let Some(entries) = exc_map.get(&norm_surface) {
                 for lemma in entries {
                     if lemma_exists(pos, lemma) {
                         push_unique(
@@ -129,12 +129,11 @@ impl Morphy {
                     }
                 }
             }
-        }
 
         // Rule-based guesses.
         for (suffix, replacement) in rules_for(pos) {
-            if let Some(candidate) = apply_rule(&norm_surface, suffix, replacement) {
-                if lemma_exists(pos, &candidate) {
+            if let Some(candidate) = apply_rule(&norm_surface, suffix, replacement)
+                && lemma_exists(pos, &candidate) {
                     push_unique(
                         &mut out,
                         &mut seen,
@@ -148,7 +147,6 @@ impl Morphy {
                         },
                     );
                 }
-            }
         }
 
         out
@@ -206,11 +204,10 @@ fn apply_rule(surface: &str, suffix: &str, replacement: &str) -> Option<String> 
             let mut chars = candidate.chars();
             let prev = chars.next_back();
             let last = chars.next_back();
-            if let (Some(a), Some(b)) = (prev, last) {
-                if a == b {
+            if let (Some(a), Some(b)) = (prev, last)
+                && a == b {
                     candidate.pop();
                 }
-            }
         }
 
         candidate
