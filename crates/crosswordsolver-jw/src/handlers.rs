@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
@@ -133,6 +135,9 @@ pub fn router(state: AppState) -> Router {
         .route("/anagrams", get(anagram_frontend))
         .route("/synonyms", get(synonyms_frontend))
         .route("/about", get(about_frontend))
+        .route("/icons/:name", get(pwa_icon))
+        .route("/manifest.webmanifest", get(manifest))
+        .route("/service-worker.js", get(service_worker))
         .route("/robots.txt", get(robots))
         .route("/healthz", get(healthz))
         .route("/v1/matches", get(matches))
@@ -222,6 +227,93 @@ async fn about_frontend(State(state): State<AppState>) -> Response {
         html,
     )
         .into_response()
+}
+
+async fn pwa_icon(Path(name): Path<String>, State(state): State<AppState>) -> Response {
+    let file_name = match name.as_str() {
+        "icon-192.png" => "icon-192.png",
+        "icon-512.png" => "icon-512.png",
+        "apple-touch-icon-180.png" => "apple-touch-icon-180.png",
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("static")
+        .join(file_name);
+
+    let Ok(body) = fs::read(icon_path) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let headers = [
+        (header::CONTENT_TYPE, HeaderValue::from_static("image/png")),
+        (
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=43200, immutable"),
+        ),
+    ];
+
+    if state.disable_cache {
+        return (
+            [(header::CONTENT_TYPE, HeaderValue::from_static("image/png"))],
+            body,
+        )
+            .into_response();
+    }
+
+    (headers, body).into_response()
+}
+
+async fn manifest(State(state): State<AppState>) -> Response {
+    let headers = [
+        (
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/manifest+json"),
+        ),
+        (
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=3600, immutable"),
+        ),
+    ];
+
+    if state.disable_cache {
+        return (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/manifest+json"),
+            )],
+            MANIFEST_JSON,
+        )
+            .into_response();
+    }
+
+    (headers, MANIFEST_JSON).into_response()
+}
+
+async fn service_worker(State(state): State<AppState>) -> Response {
+    let headers = [
+        (
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/javascript"),
+        ),
+        (
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=3600"),
+        ),
+    ];
+
+    if state.disable_cache {
+        return (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/javascript"),
+            )],
+            SERVICE_WORKER,
+        )
+            .into_response();
+    }
+
+    (headers, SERVICE_WORKER).into_response()
 }
 
 async fn matches(
@@ -558,6 +650,9 @@ const SOLVER_SCRIPT: &str = include_str!("../templates/solver_script.js");
 const ANAGRAM_SCRIPT: &str = include_str!("../templates/anagram_script.js");
 const SYNONYMS_SCRIPT: &str = include_str!("../templates/synonyms_script.js");
 const ABOUT_SCRIPT: &str = include_str!("../templates/about_script.js");
+const PWA_BOOTSTRAP: &str = include_str!("../templates/pwa_bootstrap.js");
+const MANIFEST_JSON: &str = include_str!("../templates/manifest.webmanifest");
+const SERVICE_WORKER: &str = include_str!("../templates/service_worker.js");
 
 fn render_page(
     title: &str,
@@ -575,7 +670,14 @@ fn render_page(
         .replace("{{header}}", &header)
         .replace("{{body}}", body)
         .replace("{{footer}}", FOOTER_HTML)
-        .replace("{{scripts}}", &format!(r#"<script>{}</script>"#, script));
+        .replace(
+            "{{scripts}}",
+            &format!(
+                r#"<script>{}</script>
+  <script>{}</script>"#,
+                PWA_BOOTSTRAP, script
+            ),
+        );
     base.replace("__MAX_LEN__", &MAX_WORD_LEN.to_string())
 }
 
