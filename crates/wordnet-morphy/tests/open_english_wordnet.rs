@@ -19,12 +19,12 @@ fn resolves_demo_words_against_open_english_wordnet() {
     let morph = Morphy::load(&dir).expect("load morph");
     let exists = |pos, lemma: &str| wn.lemma_exists(pos, lemma);
 
-    let running = morph.lemmas_for(Pos::Verb, "running", &exists);
+    let running = morph.lemmas_for(Pos::Verb, "running", exists);
     assert!(running.iter().any(|c| c.lemma == "run"));
 
-    let children = morph.lemmas_for(Pos::Noun, "children", &exists);
+    let children = morph.lemmas_for(Pos::Noun, "children", exists);
     assert!(children.iter().any(|c| c.lemma == "child"));
 
-    let better = morph.lemmas_for(Pos::Adj, "better", &exists);
+    let better = morph.lemmas_for(Pos::Adj, "better", exists);
     assert!(!better.is_empty());
 }

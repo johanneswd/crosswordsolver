@@ -1,0 +1,30 @@
+image: rust:1.92
+
+stages:
+  - test
+  - audit
+
+variables:
+  CARGO_TERM_COLOR: always
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - target
+    - /usr/local/cargo/registry
+    - /usr/local/cargo/git
+    - /usr/local/cargo/bin
+
+test:
+  stage: test
+  script:
+    - cargo fetch --locked
+    - cargo test --workspace --all-targets --locked
+
+cargo_audit:
+  stage: audit
+  needs: ["test"]
+  script:
+    - cargo install --locked cargo-audit
+    - cargo audit

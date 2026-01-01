@@ -160,8 +160,8 @@ pub fn decode_st(hex4: &str) -> (Option<u16>, Option<u16>) {
 
     match u16::from_str_radix(hex4, 16) {
         Ok(val) => {
-            let src = (val >> 8) as u16;
-            let dst = (val & 0x00FF) as u16;
+            let src = val >> 8;
+            let dst = val & 0x00FF;
             let src = if src == 0 { None } else { Some(src) };
             let dst = if dst == 0 { None } else { Some(dst) };
             (src, dst)
